@@ -433,26 +433,53 @@ def _sw_sms(phone: str, body: str, name: str) -> bool:
 
 
 def _fub_note(pid: int, phone: str, body: str, name: str):
-    """Log the outgoing text to FUB — tries textMessages first, falls back to note."""
+    """Send text through FUB's system. Priority:
+    1. FUB internal API via team subdomain (sends from FUB number, shows in FUB thread)
+    2. FUB public REST API textMessages endpoint
+    3. Note fallback
+    """
     auth = (FUB_KEY, "")
+
+    # 1. FUB internal API — same endpoint Chrome injection uses, but with API key auth
+    base = _get_fub_team_base()
+    if base:
+        try:
+            from_num = os.environ.get("SIGNALWIRE_FROM_NUMBER") or os.environ.get("TWILIO_FROM_NUMBER", "")
+            r = http.post(
+                f"{base}/api/v1/textMessages",
+                auth=auth,
+                headers={"Content-Type": "application/json", "x-system": "fub-spa"},
+                json={"personId": pid, "toNumber": phone, "fromNumber": from_num, "message": body},
+                timeout=10,
+            )
+            if r.status_code < 300:
+                _log(f"FUB text ✓  {name} → sent via FUB")
+                return
+            _log(f"FUB internal text {r.status_code} — {r.text[:80]}")
+        except Exception as e:
+            _log(f"FUB internal text error: {e}")
+
+    # 2. FUB public REST API
     try:
         r = http.post(f"{FUB_URL}/textMessages", auth=auth, json={
             "personId":   pid,
             "toNumber":   phone,
             "message":    body,
             "isIncoming": 0,
-        })
+        }, timeout=10)
         if r.status_code < 300:
-            _log(f"FUB text ✓  {name} → logged as text message")
+            _log(f"FUB text ✓  {name} → sent via FUB API")
             return
     except Exception:
         pass
+
+    # 3. Note fallback
     try:
         http.post(f"{FUB_URL}/notes", auth=auth, json={
             "personId": pid,
             "subject":  "Auto-text sent",
             "body":     f"📱 {body}",
-        })
+        }, timeout=10)
         _log(f"FUB note ✓  {name} → text logged as note")
     except Exception as e:
         _log(f"FUB note error: {e}")
