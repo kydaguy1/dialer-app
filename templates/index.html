@@ -23,6 +23,8 @@
 }
 html, body {
   height: 100%;
+  width: 100%;
+  overflow-x: hidden;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background: #e2e8f0;
   color: var(--text);
@@ -32,9 +34,11 @@ html, body {
   display: flex;
   flex-direction: column;
   min-height: 100%;
+  width: 100%;
   max-width: 540px;
   margin: 0 auto;
   background: var(--white);
+  overflow-x: hidden;
 }
 @media (min-width: 560px) {
   body { padding: 20px; background: #cbd5e1; }
@@ -103,9 +107,9 @@ html, body {
 
 /* ─── Load section ─── */
 .load-section { margin-bottom: 14px; }
-.fub-row { display: flex; gap: 8px; margin-bottom: 8px; }
+.fub-row { display: flex; gap: 8px; margin-bottom: 8px; min-width: 0; }
 .fub-select {
-  flex: 1; padding: 11px 36px 11px 12px; border: 1.5px solid var(--border);
+  flex: 1; min-width: 0; padding: 11px 36px 11px 12px; border: 1.5px solid var(--border);
   border-radius: 10px; background: var(--white); color: var(--text);
   font-size: 14px; cursor: pointer; outline: none; min-height: 46px;
   -webkit-appearance: none;
@@ -454,6 +458,17 @@ hr.s-div      { border: none; border-top: 1px solid var(--border); margin: 10px 
         <div class="pill-toggle">
           <button id="pill-buyer"  class="pill active" onclick="setTextType('buyer')">🏠 Buyer</button>
           <button id="pill-seller" class="pill"        onclick="setTextType('seller')">🏡 Seller</button>
+        </div>
+      </div>
+      <div id="text-edit-row" style="display:none">
+        <div style="font-size:11px;color:var(--gray);margin-bottom:5px;font-weight:600;">
+          TEXT MESSAGE — use <code style="background:var(--border);padding:1px 4px;border-radius:3px">{first}</code> for lead's first name
+        </div>
+        <textarea id="text-edit-area" rows="3"
+          style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;line-height:1.5;resize:vertical;font-family:inherit;color:var(--text);background:var(--white);outline:none;"
+          onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border)'"></textarea>
+        <div style="display:flex;justify-content:flex-end;margin-top:6px;">
+          <button onclick="saveTextTemplate()" style="padding:7px 16px;background:var(--blue);color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;min-height:32px;">Save</button>
         </div>
       </div>
     </div>
@@ -842,6 +857,55 @@ function setStatus(type, msg) {
 function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
+
+// ── Text template editor ──────────────────────────────────────────────────────
+let _textTemplates = {buyer: '', seller: ''};
+let _currentTextType = 'buyer';
+
+async function loadTextTemplates() {
+  try {
+    const d = await fetch('/api/text-templates').then(r => r.json());
+    _textTemplates = d.templates || _textTemplates;
+    refreshTextEditor();
+  } catch(e) {}
+}
+
+function refreshTextEditor() {
+  const area = document.getElementById('text-edit-area');
+  if (area) area.value = _textTemplates[_currentTextType] || '';
+}
+
+async function saveTextTemplate() {
+  const area = document.getElementById('text-edit-area');
+  const val = area ? area.value.trim() : '';
+  if (!val) return;
+  _textTemplates[_currentTextType] = val;
+  await fetch('/api/text-templates', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({[_currentTextType]: val}),
+  });
+  const btn = event.target;
+  btn.textContent = '✓ Saved';
+  setTimeout(() => { btn.textContent = 'Save'; }, 1500);
+}
+
+// Show/hide text editor when auto-text toggled or type changes
+const _origSetAutoText = setAutoText;
+setAutoText = async function(enabled) {
+  await _origSetAutoText(enabled);
+  document.getElementById('text-edit-row').style.display = enabled ? 'block' : 'none';
+  if (enabled) { await loadTextTemplates(); }
+};
+
+const _origSetTextType = setTextType;
+setTextType = async function(type) {
+  _currentTextType = type;
+  await _origSetTextType(type);
+  refreshTextEditor();
+};
+
+loadTextTemplates();
 </script>
 </body>
 </html>

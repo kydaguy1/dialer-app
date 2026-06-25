@@ -415,6 +415,12 @@ _AUTO_TEXT_BUYER = (
     "Ready to find your perfect home? Text or call me back: (951) 447-8728 🏠"
 )
 
+# Mutable at runtime — persists across sessions until app restarts
+_text_templates: dict = {
+    "buyer":  _AUTO_TEXT_BUYER,
+    "seller": _AUTO_TEXT_SELLER,
+}
+
 def _sw_sms(phone: str, body: str, name: str) -> bool:
     """Send SMS directly via SignalWire/Twilio messaging API."""
     try:
@@ -479,7 +485,7 @@ def _fub_text_via_chrome(lead: dict, pid: int) -> bool:
         first     = (lead.get("name") or "there").strip().split()[0]
         with _lock:
             ttype = _s.get("text_type", "buyer")
-        template  = _AUTO_TEXT_SELLER if ttype == "seller" else _AUTO_TEXT_BUYER
+        template  = _text_templates.get(ttype, _text_templates["buyer"])
         body      = template.format(first=first)
         phone     = _e164(lead.get("phone", ""))
 
@@ -968,6 +974,19 @@ def api_text_type():
     with _lock:
         _s["text_type"] = ttype
     return jsonify({"text_type": ttype})
+
+
+@app.route("/api/text-templates", methods=["GET", "POST"])
+def api_text_templates():
+    global _text_templates
+    if request.method == "POST":
+        data = request.get_json() or {}
+        for key in ("buyer", "seller"):
+            val = (data.get(key) or "").strip()
+            if val:
+                _text_templates[key] = val
+        return jsonify({"ok": True, "templates": _text_templates})
+    return jsonify({"templates": _text_templates})
 
 
 @app.post("/api/pause")
