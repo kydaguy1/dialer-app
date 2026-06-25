@@ -5,210 +5,372 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Power Dialer</title>
 <style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f4f8;min-height:100vh;display:flex;align-items:flex-start;justify-content:center;padding:12px;padding-bottom:env(safe-area-inset-bottom,12px)}
-
-.card{background:#fff;border-radius:18px;width:min(520px,100%);box-shadow:0 4px 32px rgba(0,0,0,.09),0 1px 4px rgba(0,0,0,.05);overflow:hidden}
-
-/* Header */
-.card-header{padding:14px 20px 0;border-bottom:1px solid #f1f5f9}
-.header-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px}
-.header-top h1{font-size:15px;font-weight:700;color:#0f172a;letter-spacing:-.02em;white-space:nowrap}
-.header-actions{display:flex;gap:6px;align-items:center;flex-shrink:0}
-.btn-sm{border:none;border-radius:7px;padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;transition:all .12s;display:none;min-height:34px}
-.btn-pause{background:#fef9c3;color:#92400e}.btn-pause:hover{background:#fef08a}
-.btn-pause.paused{background:#dcfce7;color:#166534}.btn-pause.paused:hover{background:#bbf7d0}
-.btn-end{background:#fee2e2;color:#b91c1c}.btn-end:hover{background:#fecaca}
-
-/* Mac helper badge */
-.mac-badge{font-size:10px;font-weight:600;padding:3px 7px;border-radius:99px;white-space:nowrap;display:none}
-.mac-badge.on{display:inline-block;background:#dcfce7;color:#166534}
-.mac-badge.off{display:inline-block;background:#f1f5f9;color:#94a3b8}
-
-/* Progress bar */
-.progress-wrap{height:3px;background:#f1f5f9}
-.progress-fill{height:100%;background:linear-gradient(90deg,#3b82f6,#818cf8);width:0%;transition:width .6s ease}
-
-/* Status */
-.status-row{display:flex;align-items:center;gap:8px;padding:8px 20px;background:#f8fafc;border-bottom:1px solid #f1f5f9}
-.dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;background:#cbd5e1}
-.dot.ready{background:#22c55e}
-.dot.dialing{background:#f59e0b;animation:pulse 1s infinite}
-.dot.connected{background:#3b82f6}
-.dot.calling-agent{background:#a855f7;animation:pulse 1s infinite}
-.dot.done{background:#8b5cf6}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-#status-text{font-size:12px;font-weight:500;color:#64748b}
-
-/* Body */
-.card-body{padding:16px 20px}
-
-/* Load area */
-.load-row{display:flex;gap:8px;margin-bottom:7px}
-.fub-select{flex:1;padding:9px 10px;border:1.5px solid #e2e8f0;border-radius:8px;background:#f8fafc;color:#374151;font-size:13px;cursor:pointer;outline:none;transition:border-color .15s;min-height:40px}
-.fub-select:focus{border-color:#3b82f6}
-.btn-fub{padding:9px 16px;border:1.5px solid #3b82f6;border-radius:8px;background:#eff6ff;color:#1d4ed8;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .12s;min-height:40px}
-.btn-fub:hover:not(:disabled){background:#dbeafe}
-.btn-fub:disabled{opacity:.45;cursor:not-allowed}
-.btn-csv{padding:8px 12px;border:1.5px solid #e2e8f0;border-radius:8px;background:#f8fafc;color:#64748b;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:5px;transition:all .12s;white-space:nowrap;min-height:40px}
-.btn-csv:hover{background:#f1f5f9;border-color:#94a3b8}
-#csv-input{display:none}
-#leads-label{font-size:12px;color:#94a3b8;margin-bottom:12px;min-height:16px}
-
-/* Lead card */
-.lead-card{background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:12px;padding:16px 18px;margin-bottom:12px;min-height:84px;display:flex;flex-direction:column;justify-content:center;transition:all .2s}
-.lead-card.active{border-color:#3b82f6;background:#eff6ff;box-shadow:0 0 0 3px rgba(59,130,246,.1)}
-.lead-name{font-size:20px;font-weight:700;color:#0f172a;line-height:1.2}
-.lead-sub{display:flex;align-items:center;gap:12px;margin-top:4px;flex-wrap:wrap}
-.lead-phone{font-size:13px;color:#64748b}
-.call-timer{font-size:13px;font-weight:700;color:#3b82f6;font-variant-numeric:tabular-nums;display:none;letter-spacing:.01em}
-.lead-address{font-size:12px;color:#94a3b8;margin-top:3px}
-.lead-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}
-.lead-tag{font-size:11px;font-weight:600;padding:3px 8px;border-radius:5px;white-space:nowrap}
-.tag-equity{background:#fef9c3;color:#92400e}
-.tag-years{background:#e0f2fe;color:#0369a1}
-.lead-whycall{font-size:12px;color:#64748b;margin-top:6px;font-style:italic;line-height:1.4}
-.lead-link{font-size:12px;color:#3b82f6;text-decoration:none;margin-top:5px;display:none}
-.lead-link:hover{text-decoration:underline}
-.lead-placeholder{color:#94a3b8;font-size:13px;text-align:center}
-.dial-indicator{display:none;align-items:center;gap:8px;color:#f59e0b;font-size:13px;font-weight:500;margin-top:6px}
-.dial-spinner{animation:spin .8s linear infinite;display:inline-block}
-@keyframes spin{to{transform:rotate(360deg)}}
-
-/* Outcomes */
-#outcomes{display:none;margin-bottom:12px}
-.outcomes-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px}
-.btn-outcome{padding:12px 14px;border:1.5px solid transparent;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:all .12s;min-height:44px}
-.btn-i{background:#dcfce7;color:#15803d;border-color:#bbf7d0}.btn-i:hover{background:#bbf7d0}
-.btn-ni{background:#fee2e2;color:#b91c1c;border-color:#fecaca}.btn-ni:hover{background:#fecaca}
-.btn-vm{background:#fef9c3;color:#a16207;border-color:#fde68a}.btn-vm:hover{background:#fef08a}
-.btn-sk{background:#f1f5f9;color:#475569;border-color:#e2e8f0}.btn-sk:hover{background:#e2e8f0}
-.btn-cb{background:#f0fdf4;color:#166534;border-color:#86efac;grid-column:1/-1}.btn-cb:hover{background:#dcfce7}
-.btn-hup{width:100%;padding:12px;background:#dc2626;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:background .12s;min-height:44px}
-.btn-hup:hover{background:#b91c1c}
-
-/* Callback picker */
-#callback-picker{display:none;background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;padding:10px 14px;margin-top:6px;gap:6px;align-items:center;flex-wrap:wrap}
-#callback-picker span{font-size:12px;font-weight:600;color:#166534;margin-right:2px}
-.btn-cbopt{padding:7px 12px;border:1.5px solid #4ade80;border-radius:6px;background:#fff;color:#15803d;font-size:12px;font-weight:600;cursor:pointer;transition:all .12s;min-height:36px}
-.btn-cbopt:hover{background:#dcfce7}
-.btn-cbcancel{padding:7px 10px;border:1.5px solid #e2e8f0;border-radius:6px;background:#fff;color:#94a3b8;font-size:12px;cursor:pointer;margin-left:auto;min-height:36px}
-.btn-cbcancel:hover{background:#f1f5f9}
-
-/* Script panel */
-.script-toggle{width:100%;padding:10px 14px;background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:8px;font-size:12px;font-weight:600;color:#475569;cursor:pointer;text-align:left;display:flex;align-items:center;justify-content:space-between;transition:all .12s;margin-bottom:6px;min-height:40px}
-.script-toggle:hover{background:#f1f5f9;border-color:#94a3b8}
-.script-toggle.open{border-color:#3b82f6;color:#1d4ed8;background:#eff6ff}
-#script-body{display:none;background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:8px;padding:16px;margin-bottom:12px;font-size:12px;line-height:1.7;color:#374151;max-height:300px;overflow-y:auto}
-.s-tag{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#fff;background:#3b82f6;border-radius:4px;padding:2px 6px;margin-bottom:5px}
-.s-tag.green{background:#16a34a}.s-tag.amber{background:#d97706}.s-tag.red{background:#dc2626}.s-tag.gray{background:#64748b}
-.s-line{margin-bottom:10px}
-.s-fill{font-weight:700;color:#2563eb}
-.s-q{color:#0f172a;font-style:italic}
-.s-indent{padding-left:14px;border-left:2px solid #e2e8f0;margin:4px 0 8px}
-hr.s-div{border:none;border-top:1px solid #e2e8f0;margin:10px 0}
-
-/* Settings */
-.settings{background:#f8fafc;border-radius:10px;padding:12px 14px;margin-bottom:12px;display:flex;flex-direction:column;gap:10px}
-.setting-row{display:flex;align-items:center;gap:10px}
-.setting-label{font-size:12px;color:#64748b;white-space:nowrap;width:72px;flex-shrink:0}
-.seg-btns{display:flex;gap:4px;flex-wrap:wrap}
-.seg-btn{padding:6px 11px;border:1.5px solid #e2e8f0;border-radius:6px;background:#fff;color:#64748b;font-size:12px;font-weight:600;cursor:pointer;transition:all .12s;min-height:34px}
-.seg-btn:hover{border-color:#94a3b8;background:#f1f5f9}
-.seg-btn.active{background:#3b82f6;border-color:#3b82f6;color:#fff}
-.toggle-wrap{display:flex;align-items:center;gap:8px;cursor:pointer;padding:2px 0}
-.toggle-wrap input[type=checkbox]{width:16px;height:16px;accent-color:#3b82f6;cursor:pointer;flex-shrink:0}
-.toggle-wrap span{font-size:12px;color:#64748b;line-height:1.3}
-.toggle-wrap.on span{color:#1d4ed8;font-weight:600}
-.callin-number{font-size:18px;font-weight:700;color:#1d4ed8;text-decoration:none;letter-spacing:.02em}
-.callin-number:hover{text-decoration:underline}
-.pill-toggle{display:flex;gap:4px}
-.pill{padding:5px 14px;border-radius:999px;border:1.5px solid #cbd5e1;background:#f8fafc;font-size:11px;font-weight:600;color:#64748b;cursor:pointer;transition:all .15s;min-height:32px}
-.pill.active{background:#1d4ed8;border-color:#1d4ed8;color:#fff}
-
-/* Start button */
-#btn-start{width:100%;padding:14px;background:#3b82f6;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;transition:background .12s;margin-bottom:14px;letter-spacing:-.01em;min-height:48px}
-#btn-start:hover:not(:disabled){background:#2563eb}
-#btn-start:disabled{background:#bfdbfe;cursor:not-allowed}
-
-/* Stats */
-#stats{display:none;flex-wrap:wrap;gap:6px;margin-bottom:12px}
-.stat{display:flex;flex-direction:column;align-items:center;background:#f8fafc;border-radius:8px;padding:8px 6px;flex:1;min-width:52px}
-.stat-n{font-size:18px;font-weight:700;color:#0f172a;font-variant-numeric:tabular-nums}
-.stat-l{font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-top:2px;white-space:nowrap}
-.stat.s-ans .stat-n{color:#16a34a}
-.stat.s-rate .stat-n{color:#0369a1}
-.stat.s-txt .stat-n{color:#7c3aed}
-
-/* Log */
-#log{font-size:11px;color:#94a3b8;font-family:ui-monospace,'Cascadia Code',monospace;line-height:1.75;max-height:70px;overflow:hidden}
-
-/* Mobile tweaks */
-@media (max-width: 480px) {
-  body{padding:0;align-items:stretch}
-  .card{border-radius:0;min-height:100vh;box-shadow:none;width:100%}
-  .card-body{padding:12px 14px}
-  .card-header{padding:12px 14px 0}
-  .status-row{padding:8px 14px}
-  .lead-name{font-size:17px}
-  .lead-card{padding:13px 14px}
-  .callin-number{font-size:15px}
-  .outcomes-grid{grid-template-columns:1fr 1fr}
-  #script-body{max-height:200px}
-  .setting-label{width:56px;font-size:11px}
-  .seg-btn{padding:5px 8px;font-size:11px}
-  .load-row{flex-wrap:wrap}
-  .fub-select{min-width:0}
-  #stats{gap:4px}
-  .stat{padding:7px 4px;min-width:42px}
-  .stat-n{font-size:16px}
-  .stat-l{font-size:9px}
-  .btn-outcome{font-size:12px;padding:10px 8px}
-  .header-top h1{font-size:14px}
-  .btn-sm{padding:6px 9px;font-size:11px}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --blue:    #2563eb;
+  --blue-lt: #eff6ff;
+  --green:   #16a34a;
+  --red:     #dc2626;
+  --amber:   #d97706;
+  --purple:  #7c3aed;
+  --gray:    #64748b;
+  --border:  #e2e8f0;
+  --bg:      #f8fafc;
+  --white:   #ffffff;
+  --text:    #0f172a;
+  --muted:   #94a3b8;
+  --safe-b:  env(safe-area-inset-bottom, 0px);
 }
+html, body {
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #e2e8f0;
+  color: var(--text);
+  -webkit-text-size-adjust: 100%;
+}
+#app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  max-width: 540px;
+  margin: 0 auto;
+  background: var(--white);
+}
+@media (min-width: 560px) {
+  body { padding: 20px; background: #cbd5e1; }
+  #app { border-radius: 20px; box-shadow: 0 8px 48px rgba(0,0,0,.15); overflow: hidden; min-height: auto; }
+}
+
+/* ─── Header ─── */
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: var(--white);
+  border-bottom: 1px solid var(--border);
+  padding: env(safe-area-inset-top, 0) 0 0;
+}
+.header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 13px 16px;
+  gap: 8px;
+}
+.header-left { display: flex; align-items: center; gap: 8px; }
+.app-header h1 { font-size: 16px; font-weight: 800; letter-spacing: -.03em; }
+.mac-badge {
+  font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 99px; display: none;
+}
+.mac-badge.on  { display: inline-block; background: #dcfce7; color: #166534; }
+.mac-badge.off { display: inline-block; background: var(--bg); color: var(--muted); }
+.header-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.btn-sm {
+  display: none; border: none; border-radius: 8px; padding: 7px 13px;
+  font-size: 12px; font-weight: 700; cursor: pointer; min-height: 34px; white-space: nowrap;
+  transition: opacity .12s;
+}
+.btn-sm:active { opacity: .7; }
+.btn-pause        { background: #fef9c3; color: #92400e; }
+.btn-pause.paused { background: #dcfce7; color: #166534; }
+.btn-end          { background: #fee2e2; color: #b91c1c; }
+.progress-bar { height: 3px; background: var(--border); }
+.progress-fill {
+  height: 100%; background: linear-gradient(90deg, var(--blue), #818cf8);
+  width: 0%; transition: width .6s ease;
+}
+
+/* ─── Status strip ─── */
+.status-strip {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 16px; border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+.dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  background: var(--border); transition: background .3s;
+}
+.dot.ready        { background: #22c55e; }
+.dot.dialing      { background: var(--amber); animation: blink 1s infinite; }
+.dot.connected    { background: var(--blue); }
+.dot.calling-agent{ background: #a855f7; animation: blink 1s infinite; }
+.dot.done         { background: var(--purple); }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.25} }
+#status-text { font-size: 13px; font-weight: 500; color: var(--gray); }
+
+/* ─── Main scroll area ─── */
+.main-content { flex: 1; padding: 16px 16px 24px; }
+
+/* ─── Load section ─── */
+.load-section { margin-bottom: 14px; }
+.fub-row { display: flex; gap: 8px; margin-bottom: 8px; }
+.fub-select {
+  flex: 1; padding: 11px 36px 11px 12px; border: 1.5px solid var(--border);
+  border-radius: 10px; background: var(--white); color: var(--text);
+  font-size: 14px; cursor: pointer; outline: none; min-height: 46px;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='7' viewBox='0 0 11 7'%3E%3Cpath d='M1 1l4.5 4.5L10 1' stroke='%2394a3b8' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center;
+  transition: border-color .15s;
+}
+.fub-select:focus { border-color: var(--blue); }
+.btn-load {
+  padding: 11px 20px; background: var(--blue); color: #fff; border: none;
+  border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer;
+  min-height: 46px; white-space: nowrap; transition: background .12s;
+}
+.btn-load:hover:not(:disabled) { background: #1d4ed8; }
+.btn-load:disabled { background: #bfdbfe; cursor: not-allowed; }
+.csv-label {
+  display: flex; align-items: center; gap: 7px; padding: 10px 14px;
+  border: 1.5px dashed var(--border); border-radius: 10px; color: var(--gray);
+  font-size: 13px; cursor: pointer; min-height: 42px; transition: all .12s; width: 100%;
+}
+.csv-label:hover { background: var(--bg); border-color: var(--muted); }
+#csv-input { display: none; }
+#leads-label { font-size: 12px; color: var(--muted); text-align: center; min-height: 16px; margin-top: 6px; }
+
+/* ─── Call-in CTA ─── */
+#callin-row {
+  display: none;
+  margin-bottom: 14px;
+}
+.callin-cta-inner {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 4px; padding: 20px 16px 18px;
+  background: var(--blue-lt); border: 2px solid var(--blue);
+  border-radius: 16px; text-decoration: none; cursor: pointer;
+  transition: background .12s, transform .1s;
+  -webkit-tap-highlight-color: transparent;
+}
+.callin-cta-inner:active { background: #dbeafe; transform: scale(.99); }
+.callin-label {
+  font-size: 11px; font-weight: 700; color: var(--blue);
+  text-transform: uppercase; letter-spacing: .1em;
+}
+#callin-link {
+  font-size: 30px; font-weight: 800; color: var(--blue);
+  letter-spacing: .02em; text-decoration: none; display: block;
+  text-align: center;
+}
+.callin-hint { font-size: 12px; color: var(--gray); }
+
+/* ─── Lead card ─── */
+.lead-card {
+  background: var(--bg); border: 1.5px solid var(--border); border-radius: 14px;
+  padding: 16px; margin-bottom: 14px; min-height: 88px;
+  display: flex; flex-direction: column; justify-content: center;
+  transition: all .2s;
+}
+.lead-card.active {
+  background: var(--blue-lt); border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(37,99,235,.1);
+}
+.lead-placeholder { color: var(--muted); font-size: 14px; text-align: center; }
+#lead-info { display: none; }
+.lead-name { font-size: 22px; font-weight: 800; color: var(--text); line-height: 1.2; }
+.lead-sub { display: flex; align-items: center; gap: 12px; margin-top: 4px; flex-wrap: wrap; }
+.lead-phone { font-size: 14px; color: var(--gray); }
+.call-timer { font-size: 14px; font-weight: 700; color: var(--blue); font-variant-numeric: tabular-nums; display: none; }
+.lead-address { font-size: 13px; color: var(--muted); margin-top: 4px; }
+.lead-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.lead-tag { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 99px; }
+.tag-equity { background: #fef9c3; color: #92400e; }
+.tag-years  { background: #e0f2fe; color: #0369a1; }
+.lead-whycall { font-size: 12px; color: var(--gray); margin-top: 6px; font-style: italic; line-height: 1.4; }
+.lead-link { font-size: 12px; color: var(--blue); text-decoration: none; margin-top: 6px; display: none; }
+.dial-indicator { display: none; align-items: center; gap: 8px; color: var(--amber); font-size: 14px; font-weight: 500; }
+.dial-spinner { animation: spin .8s linear infinite; display: inline-block; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ─── Outcomes ─── */
+#outcomes { display: none; margin-bottom: 14px; }
+.outcomes-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+.btn-outcome {
+  padding: 14px 10px; border: 1.5px solid transparent; border-radius: 12px;
+  font-size: 14px; font-weight: 700; cursor: pointer; transition: all .12s;
+  min-height: 56px; -webkit-tap-highlight-color: transparent;
+}
+.btn-outcome:active { transform: scale(.97); }
+.btn-i  { background: #dcfce7; color: #15803d; border-color: #86efac; }
+.btn-ni { background: #fee2e2; color: #b91c1c; border-color: #fca5a5; }
+.btn-vm { background: #fef9c3; color: #a16207; border-color: #fde68a; }
+.btn-sk { background: var(--bg);  color: #475569; border-color: var(--border); }
+.btn-cb { background: #f0fdf4; color: #166534; border-color: #86efac; grid-column: 1/-1; }
+.btn-hup {
+  width: 100%; padding: 16px; background: var(--red); color: #fff;
+  border: none; border-radius: 12px; font-size: 15px; font-weight: 700;
+  cursor: pointer; min-height: 56px; transition: background .12s;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn-hup:active { background: #b91c1c; }
+
+/* ─── Callback picker ─── */
+#callback-picker {
+  display: none; background: #f0fdf4; border: 1.5px solid #86efac;
+  border-radius: 10px; padding: 10px 14px; margin-bottom: 8px;
+  gap: 6px; align-items: center; flex-wrap: wrap;
+}
+#callback-picker span { font-size: 12px; font-weight: 700; color: #166534; }
+.btn-cbopt {
+  padding: 8px 14px; border: 1.5px solid #4ade80; border-radius: 7px; background: #fff;
+  color: #15803d; font-size: 12px; font-weight: 600; cursor: pointer; min-height: 36px;
+}
+.btn-cbcancel {
+  padding: 8px 12px; border: 1.5px solid var(--border); border-radius: 7px; background: #fff;
+  color: var(--muted); font-size: 12px; cursor: pointer; margin-left: auto; min-height: 36px;
+}
+
+/* ─── Script panel ─── */
+.script-toggle {
+  width: 100%; padding: 11px 14px; background: var(--bg); border: 1.5px solid var(--border);
+  border-radius: 10px; font-size: 13px; font-weight: 600; color: var(--gray);
+  cursor: pointer; text-align: left; display: flex; align-items: center;
+  justify-content: space-between; margin-bottom: 8px; min-height: 44px; transition: all .12s;
+}
+.script-toggle.open { border-color: var(--blue); color: #1d4ed8; background: var(--blue-lt); }
+#script-body {
+  display: none; background: var(--bg); border: 1.5px solid var(--border);
+  border-radius: 10px; padding: 16px; margin-bottom: 14px;
+  font-size: 12px; line-height: 1.75; color: #374151; max-height: 260px; overflow-y: auto;
+}
+.s-tag {
+  display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: #fff; background: var(--blue);
+  border-radius: 4px; padding: 2px 6px; margin-bottom: 5px;
+}
+.s-tag.green  { background: #16a34a; }
+.s-tag.amber  { background: #d97706; }
+.s-tag.red    { background: var(--red); }
+.s-tag.gray   { background: var(--gray); }
+.s-line       { margin-bottom: 10px; }
+.s-fill       { font-weight: 700; color: #2563eb; }
+.s-q          { color: var(--text); font-style: italic; }
+.s-indent     { padding-left: 14px; border-left: 2px solid var(--border); margin: 4px 0 8px; }
+hr.s-div      { border: none; border-top: 1px solid var(--border); margin: 10px 0; }
+
+/* ─── Settings ─── */
+.settings {
+  background: var(--bg); border: 1.5px solid var(--border); border-radius: 12px;
+  padding: 14px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 12px;
+}
+.setting-row { display: flex; align-items: center; gap: 10px; }
+.setting-label { font-size: 12px; color: var(--gray); width: 58px; flex-shrink: 0; font-weight: 500; }
+.seg-btns { display: flex; gap: 4px; flex-wrap: wrap; }
+.seg-btn {
+  padding: 7px 13px; border: 1.5px solid var(--border); border-radius: 8px;
+  background: var(--white); color: var(--gray); font-size: 12px; font-weight: 600;
+  cursor: pointer; transition: all .12s; min-height: 36px;
+}
+.seg-btn:hover { border-color: var(--muted); }
+.seg-btn.active { background: var(--blue); border-color: var(--blue); color: #fff; }
+.toggle-wrap {
+  display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 2px 0;
+}
+.toggle-wrap input[type=checkbox] {
+  width: 18px; height: 18px; accent-color: var(--blue); cursor: pointer; flex-shrink: 0;
+}
+.toggle-wrap span { font-size: 13px; color: var(--gray); }
+.toggle-wrap.on span { color: var(--blue); font-weight: 600; }
+.pill-toggle { display: flex; gap: 4px; }
+.pill {
+  padding: 7px 16px; border-radius: 99px; border: 1.5px solid var(--border);
+  background: var(--white); font-size: 12px; font-weight: 600; color: var(--gray);
+  cursor: pointer; min-height: 36px; transition: all .12s;
+}
+.pill.active { background: var(--blue); border-color: var(--blue); color: #fff; }
+
+/* ─── Start button ─── */
+#btn-start {
+  width: 100%; padding: 16px; background: var(--blue); color: #fff;
+  border: none; border-radius: 13px; font-size: 16px; font-weight: 800;
+  cursor: pointer; margin-bottom: 14px; letter-spacing: -.02em; min-height: 56px;
+  transition: background .12s; -webkit-tap-highlight-color: transparent;
+}
+#btn-start:hover:not(:disabled) { background: #1d4ed8; }
+#btn-start:disabled { background: #bfdbfe; cursor: not-allowed; }
+
+/* ─── Stats ─── */
+#stats {
+  display: none; flex-wrap: wrap; gap: 6px; margin-bottom: 14px;
+}
+.stat {
+  flex: 1; min-width: 52px; background: var(--bg); border-radius: 10px;
+  padding: 10px 6px; display: flex; flex-direction: column; align-items: center;
+}
+.stat-n { font-size: 20px; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; line-height: 1; }
+.stat-l { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-top: 3px; white-space: nowrap; }
+.s-ans  .stat-n { color: var(--green); }
+.s-rate .stat-n { color: #0369a1; }
+.s-txt  .stat-n { color: var(--purple); }
+
+/* ─── Log ─── */
+#log { font-size: 11px; color: var(--muted); font-family: ui-monospace, 'SF Mono', monospace; line-height: 1.75; max-height: 72px; overflow: hidden; }
+
+/* ─── Footer ─── */
+.app-footer {
+  display: flex; align-items: center; justify-content: center;
+  padding: 12px 16px calc(12px + var(--safe-b));
+  border-top: 1px solid var(--border);
+}
+.logout-btn {
+  background: none; border: none; color: var(--muted); font-size: 12px;
+  cursor: pointer; padding: 4px 8px;
+}
+.logout-btn:hover { color: var(--red); }
 </style>
 </head>
 <body>
-<div class="card">
+<div id="app">
 
   <!-- Header -->
-  <div class="card-header">
-    <div class="header-top">
-      <h1>⚡ Power Dialer</h1>
-      <div class="header-actions">
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="header-left">
+        <h1>⚡ Power Dialer</h1>
         <span class="mac-badge" id="mac-badge">Mac</span>
+      </div>
+      <div class="header-actions">
         <button class="btn-sm btn-pause" id="btn-pause" onclick="togglePause()">⏸ Pause</button>
         <button class="btn-sm btn-end"   id="btn-end"   onclick="endSession()">✕ End</button>
       </div>
     </div>
-    <div class="progress-wrap"><div class="progress-fill" id="progress-fill"></div></div>
-  </div>
+    <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+  </header>
 
   <!-- Status -->
-  <div class="status-row">
+  <div class="status-strip">
     <div class="dot" id="dot"></div>
     <span id="status-text">Load leads to begin</span>
   </div>
 
-  <!-- Body -->
-  <div class="card-body">
+  <!-- Scrollable body -->
+  <div class="main-content">
 
     <!-- Load leads -->
-    <div class="load-row">
-      <select class="fub-select" id="fub-stage" onchange="document.getElementById('btn-fub-load').disabled=!this.value">
-        <option value="">Loading FUB lists…</option>
-      </select>
-      <button class="btn-fub" id="btn-fub-load" onclick="loadFromFUB()" disabled>Load</button>
-    </div>
-    <div class="load-row" style="margin-bottom:6px">
-      <label class="btn-csv" for="csv-input">
-        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+    <div class="load-section">
+      <div class="fub-row">
+        <select class="fub-select" id="fub-stage" onchange="document.getElementById('btn-fub-load').disabled=!this.value">
+          <option value="">Loading FUB lists…</option>
+        </select>
+        <button class="btn-load" id="btn-fub-load" onclick="loadFromFUB()" disabled>Load</button>
+      </div>
+      <label class="csv-label" for="csv-input">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
         Upload CSV instead
       </label>
       <input type="file" id="csv-input" accept=".csv" onchange="loadFile(this)">
+      <div id="leads-label"></div>
     </div>
-    <div id="leads-label"></div>
+
+    <!-- Call-in CTA (shown after Start Session) -->
+    <div id="callin-row" style="display:none">
+      <div class="callin-cta-inner" onclick="document.getElementById('callin-link').click()">
+        <span class="callin-label">📞 Tap to call in &amp; start dialing</span>
+        <a id="callin-link" href="tel:+19517621736">(951) 762-1736</a>
+        <span class="callin-hint">Connects you to the conference bridge</span>
+      </div>
+    </div>
 
     <!-- Lead card -->
     <div class="lead-card" id="lead-card">
@@ -222,18 +384,27 @@ hr.s-div{border:none;border-top:1px solid #e2e8f0;margin:10px 0}
         <div class="lead-address" id="lead-address"></div>
         <div class="lead-tags" id="lead-tags" style="display:none">
           <span class="lead-tag tag-equity" id="lead-equity"></span>
-          <span class="lead-tag tag-years" id="lead-years"></span>
+          <span class="lead-tag tag-years"  id="lead-years"></span>
         </div>
         <div class="lead-whycall" id="lead-whycall" style="display:none"></div>
         <a class="lead-link" id="lead-fub-url" href="#" target="_blank">Open in FUB →</a>
         <div class="dial-indicator" id="dial-indicator">
-          <span class="dial-spinner">↻</span><span id="dial-count"></span>
+          <span class="dial-spinner">↻</span>
+          <span id="dial-count"></span>
         </div>
       </div>
     </div>
 
     <!-- Outcome buttons -->
-    <div id="outcomes">
+    <div id="outcomes" style="display:none">
+      <div id="callback-picker" style="display:none">
+        <span>Callback:</span>
+        <button class="btn-cbopt" onclick="scheduleCallback(0,'Today')">Today</button>
+        <button class="btn-cbopt" onclick="scheduleCallback(1,'Tomorrow')">Tomorrow</button>
+        <button class="btn-cbopt" onclick="scheduleCallback(3,'3 Days')">3 Days</button>
+        <button class="btn-cbopt" onclick="scheduleCallback(7,'1 Week')">1 Week</button>
+        <button class="btn-cbcancel" onclick="hideCallbackPicker()">✕</button>
+      </div>
       <div class="outcomes-grid">
         <button class="btn-outcome btn-i"  onclick="next('Interested')">✓ Interested</button>
         <button class="btn-outcome btn-ni" onclick="next('Not Interested')">✗ Not Interested</button>
@@ -242,17 +413,9 @@ hr.s-div{border:none;border-top:1px solid #e2e8f0;margin:10px 0}
         <button class="btn-outcome btn-cb" onclick="showCallbackPicker()">📅 Schedule Callback</button>
       </div>
       <button class="btn-hup" onclick="next('Hung Up')">✕ Hang Up &amp; Next</button>
-      <div id="callback-picker">
-        <span>Callback for:</span>
-        <button class="btn-cbopt" onclick="scheduleCallback(0,'Today')">Today</button>
-        <button class="btn-cbopt" onclick="scheduleCallback(1,'Tomorrow')">Tomorrow</button>
-        <button class="btn-cbopt" onclick="scheduleCallback(3,'In 3 Days')">3 Days</button>
-        <button class="btn-cbopt" onclick="scheduleCallback(7,'Next Week')">1 Week</button>
-        <button class="btn-cbcancel" onclick="hideCallbackPicker()">Cancel</button>
-      </div>
     </div>
 
-    <!-- Script panel -->
+    <!-- Script -->
     <button class="script-toggle" id="script-toggle" onclick="toggleScript()">
       <span>📋 Call Script</span>
       <span id="script-arrow">▾</span>
@@ -261,10 +424,6 @@ hr.s-div{border:none;border-top:1px solid #e2e8f0;margin:10px 0}
 
     <!-- Settings -->
     <div class="settings">
-      <div class="setting-row" id="callin-row" style="display:none">
-        <span class="setting-label">Dial in</span>
-        <a id="callin-link" href="tel:+19517621736" class="callin-number">(951) 762-1736</a>
-      </div>
       <div class="setting-row">
         <span class="setting-label">Lines</span>
         <div class="seg-btns" id="line-btns">
@@ -293,8 +452,8 @@ hr.s-div{border:none;border-top:1px solid #e2e8f0;margin:10px 0}
       <div class="setting-row" id="text-type-row" style="display:none">
         <span class="setting-label"></span>
         <div class="pill-toggle">
-          <button id="pill-buyer" class="pill active" onclick="setTextType('buyer')">🏠 Buyer</button>
-          <button id="pill-seller" class="pill" onclick="setTextType('seller')">🏡 Seller</button>
+          <button id="pill-buyer"  class="pill active" onclick="setTextType('buyer')">🏠 Buyer</button>
+          <button id="pill-seller" class="pill"        onclick="setTextType('seller')">🏡 Seller</button>
         </div>
       </div>
     </div>
@@ -303,10 +462,10 @@ hr.s-div{border:none;border-top:1px solid #e2e8f0;margin:10px 0}
     <button id="btn-start" onclick="startSession()" disabled>🎧 Start Session</button>
 
     <!-- Stats -->
-    <div id="stats">
+    <div id="stats" style="display:none">
       <div class="stat"><span class="stat-n" id="s-called">0</span><span class="stat-l">Dialed</span></div>
       <div class="stat s-ans"><span class="stat-n" id="s-answered">0</span><span class="stat-l">Answered</span></div>
-      <div class="stat s-rate"><span class="stat-n" id="s-rate">—</span><span class="stat-l">Ans Rate</span></div>
+      <div class="stat s-rate"><span class="stat-n" id="s-rate">—</span><span class="stat-l">Ans %</span></div>
       <div class="stat"><span class="stat-n" id="s-voicemail">0</span><span class="stat-l">VM</span></div>
       <div class="stat"><span class="stat-n" id="s-no_answer">0</span><span class="stat-l">No Ans</span></div>
       <div class="stat s-txt"><span class="stat-n" id="s-texts">0</span><span class="stat-l">Texts</span></div>
@@ -316,22 +475,28 @@ hr.s-div{border:none;border-top:1px solid #e2e8f0;margin:10px 0}
     <!-- Log -->
     <div id="log"></div>
 
-  </div>
-</div>
+  </div><!-- /main-content -->
+
+  <!-- Footer -->
+  <footer class="app-footer">
+    <form method="POST" action="/logout">
+      <button class="logout-btn" type="submit">Sign out</button>
+    </form>
+  </footer>
+
+</div><!-- /app -->
 
 <script>
 let callStart = null, polling = null, lastState = null, lastLeadKey = null;
 let leadsLoaded = 0, advanceDelay = 0, timerInterval = null, currentLead = null;
 let scriptOpen = false;
 
-// ── Script template ───────────────────────────────────────────────────────────
 function buildScript(lead) {
-  const name   = lead && lead.name    ? lead.name                     : '___';
-  const first  = lead && lead.name    ? lead.name.split(' ')[0]       : '___';
-  const addr   = lead && lead.address ? lead.address                  : 'your property';
-  const equity = lead && lead.equity  ? lead.equity                   : '___';
-  const years  = lead && lead.years_owned ? lead.years_owned + ' yrs' : '___';
-
+  const name   = lead && lead.name        ? lead.name                     : '___';
+  const first  = lead && lead.name        ? lead.name.split(' ')[0]       : '___';
+  const addr   = lead && lead.address     ? lead.address                  : 'your property';
+  const equity = lead && lead.equity      ? lead.equity                   : '___';
+  const years  = lead && lead.years_owned ? lead.years_owned + ' yrs'     : '___';
   return `
 <div class="s-line"><span class="s-tag green">OPENER</span><br>
 <span class="s-q">"Hi, is this <span class="s-fill">${name}</span>? — This is Ky with Bringas Home Team in Murrieta. Quick question — you own the property at <span class="s-fill">${addr}</span>, right?"</span><br>
@@ -359,14 +524,12 @@ function buildScript(lead) {
 <span class="s-q">"Great talking to you! I'll text you that market snapshot now — it'll show recent sales nearby and what your equity looks like. My number's 951-447-8728."</span></div>`;
 }
 
-// ── Init ──────────────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
   populateStages();
   setDelay(parseInt(localStorage.getItem('advanceDelay') || '0'), true);
   renderScript(null);
 });
 
-// ── Script ────────────────────────────────────────────────────────────────────
 function toggleScript() {
   scriptOpen = !scriptOpen;
   document.getElementById('script-body').style.display = scriptOpen ? 'block' : 'none';
@@ -377,7 +540,6 @@ function renderScript(lead) {
   document.getElementById('script-body').innerHTML = buildScript(lead);
 }
 
-// ── Settings ──────────────────────────────────────────────────────────────────
 async function setLines(n) {
   document.querySelectorAll('#line-btns .seg-btn').forEach((b, i) => b.classList.toggle('active', i + 1 === n));
   await fetch('/api/lines', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({lines:n})});
@@ -407,7 +569,6 @@ async function togglePause() {
   btn.classList.toggle('paused', r.paused);
 }
 
-// ── Load ──────────────────────────────────────────────────────────────────────
 async function loadFile(input) {
   if (!input.files[0]) return;
   const fd = new FormData();
@@ -446,12 +607,11 @@ function onLeadsLoaded(count) {
   leadsLoaded = count;
   document.getElementById('leads-label').textContent = `${count} leads loaded`;
   document.getElementById('btn-start').disabled = false;
-  setStatus('idle', `${count} leads ready — start session to begin`);
+  setStatus('idle', `${count} leads ready — tap Start Session`);
   showPlaceholder('Ready to dial ' + count + ' leads');
   updateProgress(0, count);
 }
 
-// ── Session ───────────────────────────────────────────────────────────────────
 async function startSession() {
   document.getElementById('btn-start').disabled = true;
   const d = await fetch('/api/start', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({})}).then(r => r.json());
@@ -461,29 +621,31 @@ async function startSession() {
     return;
   }
   const num = d.call_in || '+19517621736';
-  document.getElementById('callin-row').style.display  = 'flex';
-  document.getElementById('callin-link').href          = `tel:${num}`;
-  document.getElementById('btn-end').style.display     = 'inline-block';
-  document.getElementById('btn-pause').style.display   = 'inline-block';
-  document.getElementById('stats').style.display       = 'flex';
-  setStatus('calling-agent', `Call ${num.replace('+1','').replace(/(\d{3})(\d{3})(\d{4})/,'($1) $2-$3')} from your phone to begin`);
+  const callinRow  = document.getElementById('callin-row');
+  const callinLink = document.getElementById('callin-link');
+  callinLink.href  = `tel:${num}`;
+  callinLink.textContent = num.replace('+1','').replace(/(\d{3})(\d{3})(\d{4})/,'($1) $2-$3');
+  callinRow.style.display  = 'block';
+  document.getElementById('btn-end').style.display    = 'inline-block';
+  document.getElementById('btn-pause').style.display  = 'inline-block';
+  document.getElementById('stats').style.display      = 'flex';
+  setStatus('calling-agent', 'Tap the number above to call in');
   showPlaceholder('Waiting for you to call in…');
   startPolling();
 }
 async function endSession() {
   stopPolling(); stopCallTimer();
   await fetch('/api/end', {method:'POST'});
-  document.getElementById('btn-end').style.display    = 'none';
-  document.getElementById('btn-pause').style.display  = 'none';
-  document.getElementById('callin-row').style.display = 'none';
+  document.getElementById('btn-end').style.display     = 'none';
+  document.getElementById('btn-pause').style.display   = 'none';
+  document.getElementById('callin-row').style.display  = 'none';
   document.getElementById('btn-start').disabled = leadsLoaded === 0;
-  document.getElementById('outcomes').style.display   = 'none';
+  document.getElementById('outcomes').style.display    = 'none';
   setStatus('idle', 'Session ended');
   showPlaceholder('Session ended');
   lastState = null;
 }
 
-// ── Polling ───────────────────────────────────────────────────────────────────
 function startPolling() { polling = setInterval(poll, 1000); }
 function stopPolling()  { if (polling) { clearInterval(polling); polling = null; } }
 async function poll() {
@@ -493,13 +655,11 @@ async function poll() {
 function updateUI(d) {
   const {state, paused, lines, send_text, text_type, lead, remaining, total, active, stats, log: logs, mac_helper} = d;
 
-  // Mac helper badge
   const badge = document.getElementById('mac-badge');
   if (mac_helper !== undefined) {
     badge.className = 'mac-badge ' + (mac_helper ? 'on' : 'off');
-    badge.title     = mac_helper ? 'Mac helper connected — FUB texts active' : 'Mac helper offline — texts via SMS';
+    badge.title = mac_helper ? 'Mac helper connected — FUB texts active' : 'Mac helper offline — texts via SMS';
   }
-
   if (send_text !== undefined) {
     document.getElementById('toggle-text').checked = send_text;
     document.getElementById('toggle-text-row').classList.toggle('on', send_text);
@@ -517,7 +677,6 @@ function updateUI(d) {
   if (lines) {
     document.querySelectorAll('#line-btns .seg-btn').forEach((b, i) => b.classList.toggle('active', i + 1 === lines));
   }
-
   ['called','answered','no_answer','voicemail'].forEach(k => {
     const el = document.getElementById('s-' + k);
     if (el) el.textContent = stats[k] || 0;
@@ -536,11 +695,10 @@ function updateUI(d) {
 
   const leadKey = lead ? (lead.id || lead.phone || null) : null;
   if (state === lastState && state !== 'dialing' && leadKey === lastLeadKey) return;
-  lastState  = state;
-  lastLeadKey = leadKey;
+  lastState = state; lastLeadKey = leadKey;
 
   if (state === 'calling-agent') {
-    setStatus('calling-agent', 'Call (951) 762-1736 from your phone to begin');
+    setStatus('calling-agent', 'Tap the number above to call in');
     showPlaceholder('Waiting for you to call in…');
   } else if (state === 'dialing') {
     setStatus('dialing', `Ringing ${active} line${active !== 1 ? 's' : ''} — ${remaining} left`);
@@ -580,7 +738,6 @@ function updateUI(d) {
   }
 }
 
-// ── Outcome ───────────────────────────────────────────────────────────────────
 async function next(outcome, skipDelay) {
   hideCallbackPicker();
   document.getElementById('outcomes').style.display = 'none';
@@ -599,7 +756,6 @@ async function next(outcome, skipDelay) {
 }
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-// ── Callback ──────────────────────────────────────────────────────────────────
 function showCallbackPicker() { document.getElementById('callback-picker').style.display = 'flex'; }
 function hideCallbackPicker() { document.getElementById('callback-picker').style.display = 'none'; }
 async function scheduleCallback(days, label) {
@@ -612,7 +768,6 @@ async function scheduleCallback(days, label) {
   next('Interested', true);
 }
 
-// ── Call timer ────────────────────────────────────────────────────────────────
 function startCallTimer() {
   timerInterval = setInterval(() => {
     if (!callStart) return;
@@ -629,7 +784,6 @@ function stopCallTimer() {
   if (el) el.style.display = 'none';
 }
 
-// ── UI helpers ────────────────────────────────────────────────────────────────
 function showLead(lead) {
   document.getElementById('lead-placeholder').style.display = 'none';
   document.getElementById('dial-indicator').style.display   = 'none';
@@ -641,9 +795,9 @@ function showLead(lead) {
   const equityEl = document.getElementById('lead-equity');
   const yearsEl  = document.getElementById('lead-years');
   if (lead.equity || lead.years_owned) {
-    equityEl.textContent = lead.equity     ? `Equity: ${lead.equity}`         : '';
-    equityEl.style.display = lead.equity   ? 'inline-block' : 'none';
-    yearsEl.textContent  = lead.years_owned ? `${lead.years_owned} yrs owned` : '';
+    equityEl.textContent = lead.equity      ? `Equity: ${lead.equity}`         : '';
+    equityEl.style.display = lead.equity    ? 'inline-block' : 'none';
+    yearsEl.textContent  = lead.years_owned ? `${lead.years_owned} yrs owned`  : '';
     yearsEl.style.display = lead.years_owned ? 'inline-block' : 'none';
     tagsEl.style.display = 'flex';
   } else {

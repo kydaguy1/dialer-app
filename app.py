@@ -426,15 +426,28 @@ def _sw_sms(phone: str, body: str, name: str) -> bool:
         return False
 
 
-def _fub_note(pid: int, body: str, name: str):
-    """Log the outgoing text as a FUB note so it appears in the activity feed."""
+def _fub_note(pid: int, phone: str, body: str, name: str):
+    """Log the outgoing text to FUB — tries textMessages first, falls back to note."""
+    auth = (FUB_KEY, "")
     try:
-        http.post(f"{FUB_URL}/notes", auth=(FUB_KEY, ""), json={
+        r = http.post(f"{FUB_URL}/textMessages", auth=auth, json={
+            "personId":   pid,
+            "toNumber":   phone,
+            "message":    body,
+            "isIncoming": 0,
+        })
+        if r.status_code < 300:
+            _log(f"FUB text ✓  {name} → logged as text message")
+            return
+    except Exception:
+        pass
+    try:
+        http.post(f"{FUB_URL}/notes", auth=auth, json={
             "personId": pid,
             "subject":  "Auto-text sent",
             "body":     f"📱 {body}",
         })
-        _log(f"FUB note ✓  {name} → text logged")
+        _log(f"FUB note ✓  {name} → text logged as note")
     except Exception as e:
         _log(f"FUB note error: {e}")
 
@@ -586,7 +599,7 @@ def _fub_text(lead: dict, pid: int, session):
         if _sw_sms(phone, body, name):
             with _lock:
                 _s["stats"]["texts_sent"] += 1
-            _fub_note(pid, body, name)
+            _fub_note(pid, phone, body, name)
 
     except Exception as e:
         _log(f"Text error: {e}")
