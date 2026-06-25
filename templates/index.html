@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Power Dialer</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f4f8;min-height:100vh;display:flex;align-items:flex-start;justify-content:center;padding:12px;padding-bottom:env(safe-area-inset-bottom,12px)}
+
+.card{background:#fff;border-radius:18px;width:min(520px,100%);box-shadow:0 4px 32px rgba(0,0,0,.09),0 1px 4px rgba(0,0,0,.05);overflow:hidden}
+
+/* Header */
+.card-header{padding:14px 20px 0;border-bottom:1px solid #f1f5f9}
+.header-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px}
+.header-top h1{font-size:15px;font-weight:700;color:#0f172a;letter-spacing:-.02em;white-space:nowrap}
+.header-actions{display:flex;gap:6px;align-items:center;flex-shrink:0}
+.btn-sm{border:none;border-radius:7px;padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;transition:all .12s;display:none;min-height:34px}
+.btn-pause{background:#fef9c3;color:#92400e}.btn-pause:hover{background:#fef08a}
+.btn-pause.paused{background:#dcfce7;color:#166534}.btn-pause.paused:hover{background:#bbf7d0}
+.btn-end{background:#fee2e2;color:#b91c1c}.btn-end:hover{background:#fecaca}
+
+/* Mac helper badge */
+.mac-badge{font-size:10px;font-weight:600;padding:3px 7px;border-radius:99px;white-space:nowrap;display:none}
+.mac-badge.on{display:inline-block;background:#dcfce7;color:#166534}
+.mac-badge.off{display:inline-block;background:#f1f5f9;color:#94a3b8}
+
+/* Progress bar */
+.progress-wrap{height:3px;background:#f1f5f9}
+.progress-fill{height:100%;background:linear-gradient(90deg,#3b82f6,#818cf8);width:0%;transition:width .6s ease}
+
+/* Status */
+.status-row{display:flex;align-items:center;gap:8px;padding:8px 20px;background:#f8fafc;border-bottom:1px solid #f1f5f9}
+.dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;background:#cbd5e1}
+.dot.ready{background:#22c55e}
+.dot.dialing{background:#f59e0b;animation:pulse 1s infinite}
+.dot.connected{background:#3b82f6}
+.dot.calling-agent{background:#a855f7;animation:pulse 1s infinite}
+.dot.done{background:#8b5cf6}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+#status-text{font-size:12px;font-weight:500;color:#64748b}
+
+/* Body */
+.card-body{padding:16px 20px}
+
+/* Load area */
+.load-row{display:flex;gap:8px;margin-bottom:7px}
+.fub-select{flex:1;padding:9px 10px;border:1.5px solid #e2e8f0;border-radius:8px;background:#f8fafc;color:#374151;font-size:13px;cursor:pointer;outline:none;transition:border-color .15s;min-height:40px}
+.fub-select:focus{border-color:#3b82f6}
+.btn-fub{padding:9px 16px;border:1.5px solid #3b82f6;border-radius:8px;background:#eff6ff;color:#1d4ed8;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .12s;min-height:40px}
+.btn-fub:hover:not(:disabled){background:#dbeafe}
+.btn-fub:disabled{opacity:.45;cursor:not-allowed}
+.btn-csv{padding:8px 12px;border:1.5px solid #e2e8f0;border-radius:8px;background:#f8fafc;color:#64748b;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:5px;transition:all .12s;white-space:nowrap;min-height:40px}
+.btn-csv:hover{background:#f1f5f9;border-color:#94a3b8}
+#csv-input{display:none}
+#leads-label{font-size:12px;color:#94a3b8;margin-bottom:12px;min-height:16px}
+
+/* Lead card */
+.lead-card{background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:12px;padding:16px 18px;margin-bottom:12px;min-height:84px;display:flex;flex-direction:column;justify-content:center;transition:all .2s}
+.lead-card.active{border-color:#3b82f6;background:#eff6ff;box-shadow:0 0 0 3px rgba(59,130,246,.1)}
+.lead-name{font-size:20px;font-weight:700;color:#0f172a;line-height:1.2}
+.lead-sub{display:flex;align-items:center;gap:12px;margin-top:4px;flex-wrap:wrap}
+.lead-phone{font-size:13px;color:#64748b}
+.call-timer{font-size:13px;font-weight:700;color:#3b82f6;font-variant-numeric:tabular-nums;display:none;letter-spacing:.01em}
+.lead-address{font-size:12px;color:#94a3b8;margin-top:3px}
+.lead-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}
+.lead-tag{font-size:11px;font-weight:600;padding:3px 8px;border-radius:5px;white-space:nowrap}
+.tag-equity{background:#fef9c3;color:#92400e}
+.tag-years{background:#e0f2fe;color:#0369a1}
+.lead-whycall{font-size:12px;color:#64748b;margin-top:6px;font-style:italic;line-height:1.4}
+.lead-link{font-size:12px;color:#3b82f6;text-decoration:none;margin-top:5px;display:none}
+.lead-link:hover{text-decoration:underline}
+.lead-placeholder{color:#94a3b8;font-size:13px;text-align:center}
+.dial-indicator{display:none;align-items:center;gap:8px;color:#f59e0b;font-size:13px;font-weight:500;margin-top:6px}
+.dial-spinner{animation:spin .8s linear infinite;display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Outcomes */
+#outcomes{display:none;margin-bottom:12px}
+.outcomes-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px}
+.btn-outcome{padding:12px 14px;border:1.5px solid transparent;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:all .12s;min-height:44px}
+.btn-i{background:#dcfce7;color:#15803d;border-color:#bbf7d0}.btn-i:hover{background:#bbf7d0}
+.btn-ni{background:#fee2e2;color:#b91c1c;border-color:#fecaca}.btn-ni:hover{background:#fecaca}
+.btn-vm{background:#fef9c3;color:#a16207;border-color:#fde68a}.btn-vm:hover{background:#fef08a}
+.btn-sk{background:#f1f5f9;color:#475569;border-color:#e2e8f0}.btn-sk:hover{background:#e2e8f0}
+.btn-cb{background:#f0fdf4;color:#166534;border-color:#86efac;grid-column:1/-1}.btn-cb:hover{background:#dcfce7}
+.btn-hup{width:100%;padding:12px;background:#dc2626;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:background .12s;min-height:44px}
+.btn-hup:hover{background:#b91c1c}
+
+/* Callback picker */
+#callback-picker{display:none;background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;padding:10px 14px;margin-top:6px;gap:6px;align-items:center;flex-wrap:wrap}
+#callback-picker span{font-size:12px;font-weight:600;color:#166534;margin-right:2px}
+.btn-cbopt{padding:7px 12px;border:1.5px solid #4ade80;border-radius:6px;background:#fff;color:#15803d;font-size:12px;font-weight:600;cursor:pointer;transition:all .12s;min-height:36px}
+.btn-cbopt:hover{background:#dcfce7}
+.btn-cbcancel{padding:7px 10px;border:1.5px solid #e2e8f0;border-radius:6px;background:#fff;color:#94a3b8;font-size:12px;cursor:pointer;margin-left:auto;min-height:36px}
+.btn-cbcancel:hover{background:#f1f5f9}
+
+/* Script panel */
+.script-toggle{width:100%;padding:10px 14px;background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:8px;font-size:12px;font-weight:600;color:#475569;cursor:pointer;text-align:left;display:flex;align-items:center;justify-content:space-between;transition:all .12s;margin-bottom:6px;min-height:40px}
+.script-toggle:hover{background:#f1f5f9;border-color:#94a3b8}
+.script-toggle.open{border-color:#3b82f6;color:#1d4ed8;background:#eff6ff}
+#script-body{display:none;background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:8px;padding:16px;margin-bottom:12px;font-size:12px;line-height:1.7;color:#374151;max-height:300px;overflow-y:auto}
+.s-tag{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#fff;background:#3b82f6;border-radius:4px;padding:2px 6px;margin-bottom:5px}
+.s-tag.green{background:#16a34a}.s-tag.amber{background:#d97706}.s-tag.red{background:#dc2626}.s-tag.gray{background:#64748b}
+.s-line{margin-bottom:10px}
+.s-fill{font-weight:700;color:#2563eb}
+.s-q{color:#0f172a;font-style:italic}
+.s-indent{padding-left:14px;border-left:2px solid #e2e8f0;margin:4px 0 8px}
+hr.s-div{border:none;border-top:1px solid #e2e8f0;margin:10px 0}
+
+/* Settings */
+.settings{background:#f8fafc;border-radius:10px;padding:12px 14px;margin-bottom:12px;display:flex;flex-direction:column;gap:10px}
+.setting-row{display:flex;align-items:center;gap:10px}
+.setting-label{font-size:12px;color:#64748b;white-space:nowrap;width:72px;flex-shrink:0}
+.seg-btns{display:flex;gap:4px;flex-wrap:wrap}
+.seg-btn{padding:6px 11px;border:1.5px solid #e2e8f0;border-radius:6px;background:#fff;color:#64748b;font-size:12px;font-weight:600;cursor:pointer;transition:all .12s;min-height:34px}
+.seg-btn:hover{border-color:#94a3b8;background:#f1f5f9}
+.seg-btn.active{background:#3b82f6;border-color:#3b82f6;color:#fff}
+.toggle-wrap{display:flex;align-items:center;gap:8px;cursor:pointer;padding:2px 0}
+.toggle-wrap input[type=checkbox]{width:16px;height:16px;accent-color:#3b82f6;cursor:pointer;flex-shrink:0}
+.toggle-wrap span{font-size:12px;color:#64748b;line-height:1.3}
+.toggle-wrap.on span{color:#1d4ed8;font-weight:600}
+.callin-number{font-size:18px;font-weight:700;color:#1d4ed8;text-decoration:none;letter-spacing:.02em}
+.callin-number:hover{text-decoration:underline}
+.pill-toggle{display:flex;gap:4px}
+.pill{padding:5px 14px;border-radius:999px;border:1.5px solid #cbd5e1;background:#f8fafc;font-size:11px;font-weight:600;color:#64748b;cursor:pointer;transition:all .15s;min-height:32px}
+.pill.active{background:#1d4ed8;border-color:#1d4ed8;color:#fff}
+
+/* Start button */
+#btn-start{width:100%;padding:14px;background:#3b82f6;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;transition:background .12s;margin-bottom:14px;letter-spacing:-.01em;min-height:48px}
+#btn-start:hover:not(:disabled){background:#2563eb}
+#btn-start:disabled{background:#bfdbfe;cursor:not-allowed}
+
+/* Stats */
+#stats{display:none;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.stat{display:flex;flex-direction:column;align-items:center;background:#f8fafc;border-radius:8px;padding:8px 6px;flex:1;min-width:52px}
+.stat-n{font-size:18px;font-weight:700;color:#0f172a;font-variant-numeric:tabular-nums}
+.stat-l{font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-top:2px;white-space:nowrap}
+.stat.s-ans .stat-n{color:#16a34a}
+.stat.s-rate .stat-n{color:#0369a1}
+.stat.s-txt .stat-n{color:#7c3aed}
+
+/* Log */
+#log{font-size:11px;color:#94a3b8;font-family:ui-monospace,'Cascadia Code',monospace;line-height:1.75;max-height:70px;overflow:hidden}
+
+/* Mobile tweaks */
+@media (max-width: 480px) {
+  body{padding:0;align-items:stretch}
+  .card{border-radius:0;min-height:100vh;box-shadow:none}
+  .lead-name{font-size:18px}
+  .callin-number{font-size:16px}
+  .outcomes-grid{grid-template-columns:1fr 1fr}
+  #script-body{max-height:220px}
+}
+</style>
+</head>
+<body>
+<div class="card">
+
+  <!-- Header -->
+  <div class="card-header">
+    <div class="header-top">
+      <h1>⚡ Power Dialer</h1>
+      <div class="header-actions">
+        <span class="mac-badge" id="mac-badge">Mac</span>
+        <button class="btn-sm btn-pause" id="btn-pause" onclick="togglePause()">⏸ Pause</button>
+        <button class="btn-sm btn-end"   id="btn-end"   onclick="endSession()">✕ End</button>
+      </div>
+    </div>
+    <div class="progress-wrap"><div class="progress-fill" id="progress-fill"></div></div>
+  </div>
+
+  <!-- Status -->
+  <div class="status-row">
+    <div class="dot" id="dot"></div>
+    <span id="status-text">Load leads to begin</span>
+  </div>
+
+  <!-- Body -->
+  <div class="card-body">
+
+    <!-- Load leads -->
+    <div class="load-row">
+      <select class="fub-select" id="fub-stage" onchange="document.getElementById('btn-fub-load').disabled=!this.value">
+        <option value="">Loading FUB lists…</option>
+      </select>
+      <button class="btn-fub" id="btn-fub-load" onclick="loadFromFUB()" disabled>Load</button>
+    </div>
+    <div class="load-row" style="margin-bottom:6px">
+      <label class="btn-csv" for="csv-input">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Upload CSV instead
+      </label>
+      <input type="file" id="csv-input" accept=".csv" onchange="loadFile(this)">
+    </div>
+    <div id="leads-label"></div>
+
+    <!-- Lead card -->
+    <div class="lead-card" id="lead-card">
+      <span class="lead-placeholder" id="lead-placeholder">No leads loaded</span>
+      <div id="lead-info" style="display:none">
+        <div class="lead-name" id="lead-name"></div>
+        <div class="lead-sub">
+          <span class="lead-phone" id="lead-phone"></span>
+          <span class="call-timer" id="call-timer">⏱ 0:00</span>
+        </div>
+        <div class="lead-address" id="lead-address"></div>
+        <div class="lead-tags" id="lead-tags" style="display:none">
+          <span class="lead-tag tag-equity" id="lead-equity"></span>
+          <span class="lead-tag tag-years" id="lead-years"></span>
+        </div>
+        <div class="lead-whycall" id="lead-whycall" style="display:none"></div>
+        <a class="lead-link" id="lead-fub-url" href="#" target="_blank">Open in FUB →</a>
+        <div class="dial-indicator" id="dial-indicator">
+          <span class="dial-spinner">↻</span><span id="dial-count"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Outcome buttons -->
+    <div id="outcomes">
+      <div class="outcomes-grid">
+        <button class="btn-outcome btn-i"  onclick="next('Interested')">✓ Interested</button>
+        <button class="btn-outcome btn-ni" onclick="next('Not Interested')">✗ Not Interested</button>
+        <button class="btn-outcome btn-vm" onclick="next('Left Message')">⌛ Left Voicemail</button>
+        <button class="btn-outcome btn-sk" onclick="next('No Answer')">→ No Answer</button>
+        <button class="btn-outcome btn-cb" onclick="showCallbackPicker()">📅 Schedule Callback</button>
+      </div>
+      <button class="btn-hup" onclick="next('Hung Up')">✕ Hang Up &amp; Next</button>
+      <div id="callback-picker">
+        <span>Callback for:</span>
+        <button class="btn-cbopt" onclick="scheduleCallback(0,'Today')">Today</button>
+        <button class="btn-cbopt" onclick="scheduleCallback(1,'Tomorrow')">Tomorrow</button>
+        <button class="btn-cbopt" onclick="scheduleCallback(3,'In 3 Days')">3 Days</button>
+        <button class="btn-cbopt" onclick="scheduleCallback(7,'Next Week')">1 Week</button>
+        <button class="btn-cbcancel" onclick="hideCallbackPicker()">Cancel</button>
+      </div>
+    </div>
+
+    <!-- Script panel -->
+    <button class="script-toggle" id="script-toggle" onclick="toggleScript()">
+      <span>📋 Call Script</span>
+      <span id="script-arrow">▾</span>
+    </button>
+    <div id="script-body"></div>
+
+    <!-- Settings -->
+    <div class="settings">
+      <div class="setting-row" id="callin-row" style="display:none">
+        <span class="setting-label">Dial in</span>
+        <a id="callin-link" href="tel:+19517621736" class="callin-number">(951) 762-1736</a>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">Lines</span>
+        <div class="seg-btns" id="line-btns">
+          <button class="seg-btn" onclick="setLines(1)">1</button>
+          <button class="seg-btn" onclick="setLines(2)">2</button>
+          <button class="seg-btn active" onclick="setLines(3)">3</button>
+          <button class="seg-btn" onclick="setLines(4)">4</button>
+          <button class="seg-btn" onclick="setLines(5)">5</button>
+        </div>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">Delay</span>
+        <div class="seg-btns" id="delay-btns">
+          <button class="seg-btn active" onclick="setDelay(0)">None</button>
+          <button class="seg-btn" onclick="setDelay(2)">2s</button>
+          <button class="seg-btn" onclick="setDelay(5)">5s</button>
+        </div>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label"></span>
+        <label class="toggle-wrap" id="toggle-text-row" for="toggle-text">
+          <input type="checkbox" id="toggle-text" onchange="setAutoText(this.checked)">
+          <span>Auto-text non-answers</span>
+        </label>
+      </div>
+      <div class="setting-row" id="text-type-row" style="display:none">
+        <span class="setting-label"></span>
+        <div class="pill-toggle">
+          <button id="pill-buyer" class="pill active" onclick="setTextType('buyer')">🏠 Buyer</button>
+          <button id="pill-seller" class="pill" onclick="setTextType('seller')">🏡 Seller</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Start -->
+    <button id="btn-start" onclick="startSession()" disabled>🎧 Start Session</button>
+
+    <!-- Stats -->
+    <div id="stats">
+      <div class="stat"><span class="stat-n" id="s-called">0</span><span class="stat-l">Dialed</span></div>
+      <div class="stat s-ans"><span class="stat-n" id="s-answered">0</span><span class="stat-l">Answered</span></div>
+      <div class="stat s-rate"><span class="stat-n" id="s-rate">—</span><span class="stat-l">Ans Rate</span></div>
+      <div class="stat"><span class="stat-n" id="s-voicemail">0</span><span class="stat-l">VM</span></div>
+      <div class="stat"><span class="stat-n" id="s-no_answer">0</span><span class="stat-l">No Ans</span></div>
+      <div class="stat s-txt"><span class="stat-n" id="s-texts">0</span><span class="stat-l">Texts</span></div>
+      <div class="stat"><span class="stat-n" id="s-remaining">0</span><span class="stat-l">Left</span></div>
+    </div>
+
+    <!-- Log -->
+    <div id="log"></div>
+
+  </div>
+</div>
+
+<script>
+let callStart = null, polling = null, lastState = null, lastLeadKey = null;
+let leadsLoaded = 0, advanceDelay = 0, timerInterval = null, currentLead = null;
+let scriptOpen = false;
+
+// ── Script template ───────────────────────────────────────────────────────────
+function buildScript(lead) {
+  const name   = lead && lead.name    ? lead.name                     : '___';
+  const first  = lead && lead.name    ? lead.name.split(' ')[0]       : '___';
+  const addr   = lead && lead.address ? lead.address                  : 'your property';
+  const equity = lead && lead.equity  ? lead.equity                   : '___';
+  const years  = lead && lead.years_owned ? lead.years_owned + ' yrs' : '___';
+
+  return `
+<div class="s-line"><span class="s-tag green">OPENER</span><br>
+<span class="s-q">"Hi, is this <span class="s-fill">${name}</span>? — This is Ky with Bringas Home Team in Murrieta. Quick question — you own the property at <span class="s-fill">${addr}</span>, right?"</span><br>
+<div class="s-indent">
+[Yes] → <span class="s-q">"You've had it about <span class="s-fill">${years}</span> — you've built up serious equity. I'm seeing that market really move right now and wanted to make sure you had the latest numbers. Is selling on your radar at all, even down the road?"</span>
+</div></div>
+<hr class="s-div">
+<div class="s-line"><span class="s-tag green">MAYBE / SOMEDAY</span><br>
+<span class="s-q">"Totally fair. A lot of owners aren't in a rush — but they want to know where they stand. Would it be worth me pulling a quick market snapshot for <span class="s-fill">${addr}</span> and texting it over? Takes me 5 minutes, zero obligation."</span></div>
+<div class="s-line"><span class="s-tag green">WANT TO KNOW MORE</span><br>
+<span class="s-q">"Based on what's closed nearby, you're likely sitting on around <span class="s-fill">${equity}</span> equity — that's a strong position. Would you want to hop on a quick 15-minute call this week so I can show you what your net looks like if you sold today?"</span></div>
+<hr class="s-div">
+<div class="s-line"><span class="s-tag amber">OBJ — NOT INTERESTED</span><br>
+<span class="s-q">"I respect that. Can I ask — is it that now's not the right time, or the property isn't something you'd ever sell?"</span><br>
+<div class="s-indent">
+[Not now] → <span class="s-q">"Got it. When would be a better time — 6 months? End of the year?"</span><br>
+[Never] → <span class="s-q">"No worries. Enjoy your evening!"</span>
+</div></div>
+<div class="s-line"><span class="s-tag amber">OBJ — ALREADY HAVE AN AGENT</span><br>
+<span class="s-q">"Totally respect that. Are you actively listed with them, or just a relationship you've had? I only ask because I specialize in this exact area — not trying to step on toes, just want to make sure you're getting the most current data."</span></div>
+<hr class="s-div">
+<div class="s-line"><span class="s-tag gray">VOICEMAIL</span><br>
+<span class="s-q">"Hey <span class="s-fill">${first}</span>, Ky Ramzy here with Bringas Home Team. You own a property at <span class="s-fill">${addr}</span> and I wanted to make sure you know where the market stands — a lot of owners in that area are sitting on more equity than they realize. Call or text me at 951-447-8728. Thanks!"</span></div>
+<div class="s-line"><span class="s-tag red">CLOSE / NEXT STEP</span><br>
+<span class="s-q">"Great talking to you! I'll text you that market snapshot now — it'll show recent sales nearby and what your equity looks like. My number's 951-447-8728."</span></div>`;
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  populateStages();
+  setDelay(parseInt(localStorage.getItem('advanceDelay') || '0'), true);
+  renderScript(null);
+});
+
+// ── Script ────────────────────────────────────────────────────────────────────
+function toggleScript() {
+  scriptOpen = !scriptOpen;
+  document.getElementById('script-body').style.display = scriptOpen ? 'block' : 'none';
+  document.getElementById('script-toggle').classList.toggle('open', scriptOpen);
+  document.getElementById('script-arrow').textContent = scriptOpen ? '▴' : '▾';
+}
+function renderScript(lead) {
+  document.getElementById('script-body').innerHTML = buildScript(lead);
+}
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+async function setLines(n) {
+  document.querySelectorAll('#line-btns .seg-btn').forEach((b, i) => b.classList.toggle('active', i + 1 === n));
+  await fetch('/api/lines', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({lines:n})});
+}
+function setDelay(n, silent) {
+  advanceDelay = n;
+  if (!silent) localStorage.setItem('advanceDelay', n);
+  const btns = document.querySelectorAll('#delay-btns .seg-btn');
+  btns[0].classList.toggle('active', n === 0);
+  btns[1].classList.toggle('active', n === 2);
+  btns[2].classList.toggle('active', n === 5);
+}
+async function setAutoText(enabled) {
+  document.getElementById('toggle-text-row').classList.toggle('on', enabled);
+  document.getElementById('text-type-row').style.display = enabled ? 'flex' : 'none';
+  await fetch('/api/send-text', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({enabled})});
+}
+async function setTextType(type) {
+  document.getElementById('pill-buyer').classList.toggle('active', type === 'buyer');
+  document.getElementById('pill-seller').classList.toggle('active', type === 'seller');
+  await fetch('/api/text-type', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({type})});
+}
+async function togglePause() {
+  const r = await fetch('/api/pause', {method:'POST'}).then(r => r.json());
+  const btn = document.getElementById('btn-pause');
+  btn.textContent = r.paused ? '▶ Resume' : '⏸ Pause';
+  btn.classList.toggle('paused', r.paused);
+}
+
+// ── Load ──────────────────────────────────────────────────────────────────────
+async function loadFile(input) {
+  if (!input.files[0]) return;
+  const fd = new FormData();
+  fd.append('file', input.files[0]);
+  const d = await fetch('/api/load', {method:'POST', body:fd}).then(r => r.json());
+  if (d.error) { alert(d.error); return; }
+  onLeadsLoaded(d.count);
+}
+async function loadFromFUB() {
+  const sel = document.getElementById('fub-stage');
+  const val = sel.value;
+  if (!val) return;
+  const parts = val.split(':');
+  const type = parts[0], name = parts[1], id = parts[2] || null;
+  const btn = document.getElementById('btn-fub-load');
+  btn.disabled = true; btn.textContent = '…';
+  const d = await fetch('/api/fub/load', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({type, name, id})}).then(r => r.json());
+  btn.disabled = false; btn.textContent = 'Load';
+  if (d.error) { alert(d.error); return; }
+  onLeadsLoaded(d.count);
+}
+async function populateStages() {
+  const d = await fetch('/api/fub/lists').then(r => r.json());
+  const sel = document.getElementById('fub-stage');
+  if (d.error) { sel.innerHTML = '<option value="">Could not load FUB lists</option>'; return; }
+  let html = '<option value="">Pick a list…</option>';
+  if (d.smartlists && d.smartlists.length)
+    html += '<optgroup label="Smart Lists">' + d.smartlists.map(x => `<option value="smartlist:${esc(x.name)}:${x.id}">${esc(x.name)}</option>`).join('') + '</optgroup>';
+  if (d.ponds && d.ponds.length)
+    html += '<optgroup label="Ponds">' + d.ponds.map(p => `<option value="pond:${esc(p.name)}:">${esc(p.name)}</option>`).join('') + '</optgroup>';
+  if (d.stages && d.stages.length)
+    html += '<optgroup label="Stages">' + d.stages.map(s => `<option value="stage:${esc(s.name)}:">${esc(s.name)}</option>`).join('') + '</optgroup>';
+  sel.innerHTML = html;
+}
+function onLeadsLoaded(count) {
+  leadsLoaded = count;
+  document.getElementById('leads-label').textContent = `${count} leads loaded`;
+  document.getElementById('btn-start').disabled = false;
+  setStatus('idle', `${count} leads ready — start session to begin`);
+  showPlaceholder('Ready to dial ' + count + ' leads');
+  updateProgress(0, count);
+}
+
+// ── Session ───────────────────────────────────────────────────────────────────
+async function startSession() {
+  document.getElementById('btn-start').disabled = true;
+  const d = await fetch('/api/start', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({})}).then(r => r.json());
+  if (d.error) {
+    alert(d.error);
+    document.getElementById('btn-start').disabled = false;
+    return;
+  }
+  const num = d.call_in || '+19517621736';
+  document.getElementById('callin-row').style.display  = 'flex';
+  document.getElementById('callin-link').href          = `tel:${num}`;
+  document.getElementById('btn-end').style.display     = 'inline-block';
+  document.getElementById('btn-pause').style.display   = 'inline-block';
+  document.getElementById('stats').style.display       = 'flex';
+  setStatus('calling-agent', `Call ${num.replace('+1','').replace(/(\d{3})(\d{3})(\d{4})/,'($1) $2-$3')} from your phone to begin`);
+  showPlaceholder('Waiting for you to call in…');
+  startPolling();
+}
+async function endSession() {
+  stopPolling(); stopCallTimer();
+  await fetch('/api/end', {method:'POST'});
+  document.getElementById('btn-end').style.display    = 'none';
+  document.getElementById('btn-pause').style.display  = 'none';
+  document.getElementById('callin-row').style.display = 'none';
+  document.getElementById('btn-start').disabled = leadsLoaded === 0;
+  document.getElementById('outcomes').style.display   = 'none';
+  setStatus('idle', 'Session ended');
+  showPlaceholder('Session ended');
+  lastState = null;
+}
+
+// ── Polling ───────────────────────────────────────────────────────────────────
+function startPolling() { polling = setInterval(poll, 1000); }
+function stopPolling()  { if (polling) { clearInterval(polling); polling = null; } }
+async function poll() {
+  try { updateUI(await fetch('/api/status').then(r => r.json())); } catch(e) {}
+}
+
+function updateUI(d) {
+  const {state, paused, lines, send_text, text_type, lead, remaining, total, active, stats, log: logs, mac_helper} = d;
+
+  // Mac helper badge
+  const badge = document.getElementById('mac-badge');
+  if (mac_helper !== undefined) {
+    badge.className = 'mac-badge ' + (mac_helper ? 'on' : 'off');
+    badge.title     = mac_helper ? 'Mac helper connected — FUB texts active' : 'Mac helper offline — texts via SMS';
+  }
+
+  if (send_text !== undefined) {
+    document.getElementById('toggle-text').checked = send_text;
+    document.getElementById('toggle-text-row').classList.toggle('on', send_text);
+    document.getElementById('text-type-row').style.display = send_text ? 'flex' : 'none';
+  }
+  if (text_type) {
+    document.getElementById('pill-buyer').classList.toggle('active', text_type === 'buyer');
+    document.getElementById('pill-seller').classList.toggle('active', text_type === 'seller');
+  }
+  if (paused !== undefined) {
+    const btn = document.getElementById('btn-pause');
+    btn.textContent = paused ? '▶ Resume' : '⏸ Pause';
+    btn.classList.toggle('paused', paused);
+  }
+  if (lines) {
+    document.querySelectorAll('#line-btns .seg-btn').forEach((b, i) => b.classList.toggle('active', i + 1 === lines));
+  }
+
+  ['called','answered','no_answer','voicemail'].forEach(k => {
+    const el = document.getElementById('s-' + k);
+    if (el) el.textContent = stats[k] || 0;
+  });
+  const textsEl = document.getElementById('s-texts');
+  if (textsEl) textsEl.textContent = stats.texts_sent || 0;
+  const rateEl = document.getElementById('s-rate');
+  if (rateEl) rateEl.textContent = stats.called > 0 ? Math.round((stats.answered / stats.called) * 100) + '%' : '—';
+  const rem = document.getElementById('s-remaining');
+  if (rem) rem.textContent = remaining;
+
+  if (total > 0) updateProgress(total - remaining, total);
+  if (logs && logs.length)
+    document.getElementById('log').innerHTML = logs.map(l => `<div>${esc(l)}</div>`).join('');
+  if (state === 'connected' && lead) updateFubUrl(lead);
+
+  const leadKey = lead ? (lead.id || lead.phone || null) : null;
+  if (state === lastState && state !== 'dialing' && leadKey === lastLeadKey) return;
+  lastState  = state;
+  lastLeadKey = leadKey;
+
+  if (state === 'calling-agent') {
+    setStatus('calling-agent', 'Call (951) 762-1736 from your phone to begin');
+    showPlaceholder('Waiting for you to call in…');
+  } else if (state === 'dialing') {
+    setStatus('dialing', `Ringing ${active} line${active !== 1 ? 's' : ''} — ${remaining} left`);
+    document.getElementById('outcomes').style.display = 'none';
+    document.getElementById('lead-card').classList.remove('active');
+    showDialIndicator(active);
+    stopCallTimer();
+  } else if (state === 'connected' && lead) {
+    setStatus('connected', 'Connected');
+    document.getElementById('outcomes').style.display = 'block';
+    document.getElementById('lead-card').classList.add('active');
+    showDialIndicator(0);
+    showLead(lead);
+    currentLead = lead;
+    renderScript(lead);
+    if (!timerInterval) { callStart = Date.now(); startCallTimer(); }
+  } else if (state === 'done') {
+    setStatus('done', `Done! ${stats.called} dialed · ${stats.answered} answered`);
+    document.getElementById('outcomes').style.display = 'none';
+    document.getElementById('lead-card').classList.remove('active');
+    showPlaceholder('Session complete 🎉');
+    stopPolling(); stopCallTimer();
+    updateProgress(total, total);
+  } else if (state === 'ready') {
+    setStatus('ready', `Ready — ${remaining} left`);
+    document.getElementById('lead-card').classList.remove('active');
+    stopCallTimer();
+  } else if (state === 'idle') {
+    setStatus('idle', 'Session ended');
+    document.getElementById('btn-end').style.display   = 'none';
+    document.getElementById('btn-pause').style.display = 'none';
+    document.getElementById('btn-start').disabled = leadsLoaded === 0;
+    document.getElementById('outcomes').style.display  = 'none';
+    showPlaceholder('Session ended');
+    stopPolling(); stopCallTimer();
+    lastState = null;
+  }
+}
+
+// ── Outcome ───────────────────────────────────────────────────────────────────
+async function next(outcome, skipDelay) {
+  hideCallbackPicker();
+  document.getElementById('outcomes').style.display = 'none';
+  const duration = callStart ? Math.round((Date.now() - callStart) / 1000) : 0;
+  callStart = null; lastState = null;
+  stopCallTimer();
+  if (!skipDelay && advanceDelay > 0 && outcome !== 'Hung Up') {
+    for (let i = advanceDelay; i > 0; i--) {
+      setStatus('ready', `Next call in ${i}s…`);
+      await sleep(1000);
+    }
+  }
+  setStatus('dialing', 'Logged — dialing next…');
+  showDialIndicator(3);
+  await fetch('/api/next', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({outcome, duration})});
+}
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ── Callback ──────────────────────────────────────────────────────────────────
+function showCallbackPicker() { document.getElementById('callback-picker').style.display = 'flex'; }
+function hideCallbackPicker() { document.getElementById('callback-picker').style.display = 'none'; }
+async function scheduleCallback(days, label) {
+  hideCallbackPicker();
+  const phone = currentLead ? currentLead.phone : '';
+  if (phone) {
+    const r = await fetch('/api/callback', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({phone, days, note:`Callback requested — ${label}`})}).then(r => r.json());
+    if (r.error) alert('Could not schedule callback: ' + r.error);
+  }
+  next('Interested', true);
+}
+
+// ── Call timer ────────────────────────────────────────────────────────────────
+function startCallTimer() {
+  timerInterval = setInterval(() => {
+    if (!callStart) return;
+    const elapsed = Math.floor((Date.now() - callStart) / 1000);
+    const m = Math.floor(elapsed / 60), s = elapsed % 60;
+    const el = document.getElementById('call-timer');
+    el.textContent = `⏱ ${m}:${s.toString().padStart(2,'0')}`;
+    el.style.display = 'inline';
+  }, 1000);
+}
+function stopCallTimer() {
+  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+  const el = document.getElementById('call-timer');
+  if (el) el.style.display = 'none';
+}
+
+// ── UI helpers ────────────────────────────────────────────────────────────────
+function showLead(lead) {
+  document.getElementById('lead-placeholder').style.display = 'none';
+  document.getElementById('dial-indicator').style.display   = 'none';
+  document.getElementById('lead-info').style.display        = 'block';
+  document.getElementById('lead-name').textContent    = lead.name    || 'Unknown';
+  document.getElementById('lead-phone').textContent   = lead.phone   || '';
+  document.getElementById('lead-address').textContent = lead.address || '';
+  const tagsEl   = document.getElementById('lead-tags');
+  const equityEl = document.getElementById('lead-equity');
+  const yearsEl  = document.getElementById('lead-years');
+  if (lead.equity || lead.years_owned) {
+    equityEl.textContent = lead.equity     ? `Equity: ${lead.equity}`         : '';
+    equityEl.style.display = lead.equity   ? 'inline-block' : 'none';
+    yearsEl.textContent  = lead.years_owned ? `${lead.years_owned} yrs owned` : '';
+    yearsEl.style.display = lead.years_owned ? 'inline-block' : 'none';
+    tagsEl.style.display = 'flex';
+  } else {
+    tagsEl.style.display = 'none';
+  }
+  const whyEl = document.getElementById('lead-whycall');
+  if (lead.why_call) { whyEl.textContent = lead.why_call; whyEl.style.display = 'block'; }
+  else { whyEl.style.display = 'none'; }
+  updateFubUrl(lead);
+}
+function updateFubUrl(lead) {
+  const el = document.getElementById('lead-fub-url');
+  if (lead && lead.fub_url) { el.href = lead.fub_url; el.style.display = 'inline'; }
+  else { el.style.display = 'none'; }
+}
+function showPlaceholder(msg) {
+  document.getElementById('lead-info').style.display      = 'none';
+  document.getElementById('dial-indicator').style.display = 'none';
+  const p = document.getElementById('lead-placeholder');
+  p.style.display = 'block';
+  p.textContent   = msg || 'No active call';
+}
+function showDialIndicator(n) {
+  if (n > 0) {
+    document.getElementById('lead-placeholder').style.display = 'block';
+    document.getElementById('lead-placeholder').textContent   = '';
+    document.getElementById('lead-info').style.display        = 'none';
+    document.getElementById('dial-indicator').style.display   = 'flex';
+    document.getElementById('dial-count').textContent = `Ringing ${n} line${n !== 1 ? 's' : ''}…`;
+  } else {
+    document.getElementById('dial-indicator').style.display = 'none';
+  }
+}
+function updateProgress(called, total) {
+  if (total <= 0) return;
+  document.getElementById('progress-fill').style.width = Math.round((called / total) * 100) + '%';
+}
+function setStatus(type, msg) {
+  document.getElementById('dot').className           = 'dot ' + type;
+  document.getElementById('status-text').textContent = msg;
+}
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
+</body>
+</html>

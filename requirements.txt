@@ -1,0 +1,8 @@
+flask>=2.3
+flask-socketio>=5.3
+python-socketio>=5.9
+twilio>=8.0
+signalwire>=2.0
+python-dotenv>=1.0
+requests>=2.31
+browser-cookie3>=0.19

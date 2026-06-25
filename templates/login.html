@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Power Dialer — Login</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f4f8;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.card{background:#fff;border-radius:18px;width:min(360px,100%);padding:32px 28px;box-shadow:0 4px 32px rgba(0,0,0,.09)}
+h1{font-size:20px;font-weight:700;color:#0f172a;margin-bottom:6px;letter-spacing:-.02em}
+p{font-size:13px;color:#64748b;margin-bottom:24px}
+label{display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:6px}
+input[type=password]{width:100%;padding:11px 14px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px;color:#0f172a;outline:none;transition:border-color .15s;margin-bottom:14px}
+input[type=password]:focus{border-color:#3b82f6}
+button{width:100%;padding:13px;background:#3b82f6;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;transition:background .12s}
+button:hover{background:#2563eb}
+.error{background:#fee2e2;color:#b91c1c;border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:14px}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>⚡ Power Dialer</h1>
+  <p>Enter your password to continue</p>
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+  <form method="post">
+    <label for="pw">Password</label>
+    <input type="password" id="pw" name="password" autofocus autocomplete="current-password" placeholder="••••••••">
+    <button type="submit">Sign In</button>
+  </form>
+</div>
+</body>
+</html>
