@@ -6,7 +6,7 @@ Start via: bash ~/Desktop/dialer/start.sh
 
 import base64
 import csv
-import json
+import json as _json
 import os
 import re
 import subprocess
@@ -22,7 +22,7 @@ import requests as http
 from dotenv import load_dotenv
 from flask import Flask, Response, jsonify, redirect, render_template, request, session
 from flask_socketio import SocketIO
-from twilio.twiml.voice_response import Conference, Dial, VoiceResponse
+from twilio.twiml.voice_response import Dial, VoiceResponse
 
 try:
     import browser_cookie3 as _bc3
@@ -398,7 +398,7 @@ def _fub_log(lead: dict, outcome: str, duration: int):
         with _lock:
             send_text = _s.get("send_text", False)
         if send_text and fub_outcome in ("No Answer", "Left Message"):
-            _fub_text(lead, pid, s)
+            _fub_text(lead, pid)
 
     except Exception as e:
         _log(f"FUB error: {e}")
@@ -493,7 +493,6 @@ def _fub_text_via_chrome(lead: dict, pid: int) -> bool:
         # names than the public REST API ('to'/'from' are rejected).
         # Each attempt is tried in turn; stop on first non-400 or on a 400
         # that isn't "Invalid fields" (which means we've reached the right shape).
-        import json as _json
         from_num = os.environ.get("SIGNALWIRE_FROM_NUMBER") or os.environ.get("TWILIO_FROM_NUMBER", "")
         payloads_b64 = base64.b64encode(_json.dumps([
             {"personId": pid, "toNumber": phone, "fromNumber": from_num, "message": body},
@@ -580,13 +579,13 @@ def _fub_text_via_chrome(lead: dict, pid: int) -> bool:
         _log(f"SMS error (Chrome): {e}")
         return False
 
-def _fub_text(lead: dict, pid: int, session):
+def _fub_text(lead: dict, pid: int):
     """Send auto-text. Priority: Mac helper (Chrome→FUB) → local Chrome → SignalWire SMS + FUB note."""
     try:
         first    = (lead.get("name") or "there").strip().split()[0]
         with _lock:
             ttype = _s.get("text_type", "buyer")
-        template = _AUTO_TEXT_SELLER if ttype == "seller" else _AUTO_TEXT_BUYER
+        template = _text_templates.get(ttype, _text_templates["buyer"])
         body     = template.format(first=first)
         phone    = _e164(lead.get("phone", ""))
         name     = lead.get("name", "?")
@@ -736,29 +735,6 @@ def api_load():
     return jsonify({"count": len(leads)})
 
 
-@app.get("/api/debug/fub")
-def api_debug_fub():
-    import traceback
-    out = {"team_base": None, "cookie_domains": [], "page_url": None,
-           "raw_result": None, "smart_lists_result": [], "error": None}
-    try:
-        if _HAS_BC3:
-            jar = _bc3.chrome(domain_name="followupboss.com")
-            out["cookie_domains"] = list({c.domain for c in jar})
-        base = _get_fub_team_base()
-        out["team_base"] = base
-        if base and _HAS_BC3:
-            pw, browser, page = _pw_fub_page(base)
-            out["page_url"] = page.url
-            url = f"{base}/api/v1/smartLists?limit=200&fub2=1&offset=0"
-            result = page.evaluate(_FETCH_JS, url)
-            out["raw_result"] = result if result else "None returned"
-            browser.close()
-            pw.stop()
-    except Exception:
-        out["error"] = traceback.format_exc()
-    return jsonify(out)
-
 
 @app.get("/api/fub/lists")
 def api_fub_lists():
@@ -838,53 +814,6 @@ def api_fub_load():
     return jsonify({"count": len(leads)})
 
 
-def _poll_agent_call(sid: str) -> None:
-    """Poll SignalWire for agent call status — fallback when Cloudflare drops webhooks."""
-    for _ in range(90):  # up to 3 minutes
-        time.sleep(2)
-        with _lock:
-            if _s.get("agent_call_sid") != sid:
-                return  # session already reset or replaced
-            if _s["state"] not in ("calling-agent", "ready", "dialing", "connected"):
-                return  # session idle or done
-            already_handled = _s["state"] != "calling-agent"
-        try:
-            c = twilio.calls(sid).fetch()
-            status = c.status
-            err    = getattr(c, "error_code", None)
-            errmsg = getattr(c, "error_message", None)
-            frm    = getattr(c, "from_", None) or getattr(c, "from_formatted", None)
-            to     = getattr(c, "to", None) or getattr(c, "to_formatted", None)
-        except Exception as e:
-            _log(f"Agent call poll error: {e}")
-            continue
-        _log(f"Agent call poll: {status} | from={frm} to={to} | err={err} msg={errmsg}")
-        if status == "in-progress":
-            with _lock:
-                if _s.get("agent_call_sid") == sid and _s["state"] == "calling-agent":
-                    _s["state"] = "ready"
-                else:
-                    return
-            _log("Your phone answered (polled) — dialing leads…")
-            threading.Thread(target=_dial_batch, daemon=True).start()
-            return
-        elif status in ("completed", "failed", "busy", "no-answer"):
-            with _lock:
-                if _s.get("agent_call_sid") != sid:
-                    return
-                c_sid   = _s.get("connected_sid")
-                c_lead  = _s.get("current_lead")
-                elapsed = int(time.time() - (_s["call_start"] or time.time())) if c_sid else 0
-                sids    = list(_s["active_calls"].keys())
-            _log(f"Agent call {status} (polled) — session stopped")
-            for s in sids:
-                threading.Thread(target=_hang, args=(s,), daemon=True).start()
-            if c_lead:
-                threading.Thread(target=_fub_log, args=(c_lead, "Interested", elapsed), daemon=True).start()
-            with _lock:
-                _reset()
-            return
-
 
 @app.post("/api/start")
 def api_start():
@@ -914,7 +843,11 @@ def api_next():
     duration = int(data.get("duration") or 0)
 
     with _lock:
-        lead          = _s.get("current_lead")
+        lead = _s.get("current_lead")
+        if not lead:
+            # Lead already hung up; webhook_call already handled cleanup and started the
+            # next batch. Don't touch active_calls or state — that would kill new calls.
+            return jsonify({"ok": True})
         sids_to_kill  = list(_s["active_calls"].keys())
         connected_sid = _s.get("connected_sid")
         _s["active_calls"]   = {}
@@ -932,9 +865,7 @@ def api_next():
     for sid in sids_to_kill + ([connected_sid] if connected_sid else []):
         threading.Thread(target=_hang, args=(sid,), daemon=True).start()
 
-    if lead:
-        threading.Thread(target=_fub_log, args=(lead, outcome, duration), daemon=True).start()
-
+    threading.Thread(target=_fub_log, args=(lead, outcome, duration), daemon=True).start()
     threading.Thread(target=_dial_batch, daemon=True).start()
     return jsonify({"ok": True})
 
@@ -1168,21 +1099,6 @@ def twiml_lead():
     return Response(str(r), mimetype="text/xml")
 
 
-@app.route("/twiml/connect-lead", methods=["GET", "POST"])
-def twiml_connect_lead():
-    """Called by webhook_amd after confirming human — connects lead into the agent conference."""
-    conf = request.values.get("conf", "")
-    r = VoiceResponse()
-    d = Dial()
-    d.conference(
-        conf,
-        start_conference_on_enter=True,
-        end_conference_on_exit=False,
-        beep=True,
-    )
-    r.append(d)
-    return Response(str(r), mimetype="text/xml")
-
 
 @app.route("/twiml/voicemail-drop", methods=["GET", "POST"])
 def twiml_voicemail_drop():
@@ -1293,163 +1209,6 @@ def webhook_call():
 
     return "", 204
 
-
-@app.post("/webhook/amd")
-def webhook_amd():
-    """Twilio async AMD — the single decision point for connecting or dropping leads.
-
-    machine_start  → voicemail greeting starting (or Google Voice screening).
-                     Start a 20s watchdog; if no machine_end fires, hang up.
-    human/unknown  → redirect lead into the conference; hang up other active calls.
-    machine_end_*  → voicemail confirmed. Drop a recorded message (beep/silence)
-                     or hang up (fax/other). Never let a voicemail join the conference.
-    """
-    sid         = request.form.get("CallSid", "")
-    answered_by = request.form.get("AnsweredBy", "")
-
-    with _lock:
-        lead = _s["active_calls"].get(sid)
-        conf = _s.get("conf_name", "")
-
-    # ── machine_start: voicemail greeting detected ───────────────────────────────
-    # Don't wait for machine_end_beep — Cloudflare often drops that second callback.
-    # Redirect immediately with pause=5 so the greeting can finish before we speak.
-    # If machine_end_beep does arrive later, it overrides this with the precise timing.
-    if answered_by == "machine_start":
-        with _lock:
-            _s["amd_machine_start"].add(sid)
-            _s["active_calls"].pop(sid, None)
-            _s["stats"]["voicemail"] += 1
-            remaining = len(_s["active_calls"])
-            connected = _s["connected_sid"]
-
-        _log(f"Voicemail (machine_start) — {lead.get('name') or sid if lead else sid}")
-        try:
-            twilio.calls(sid).update(
-                url=f"{PUBLIC_URL}/twiml/voicemail-drop?pause=5",
-                method="POST",
-            )
-        except Exception as e:
-            _log(f"VM drop failed: {e}")
-            threading.Thread(target=_hang, args=(sid,), daemon=True).start()
-
-        if lead:
-            threading.Thread(target=_fub_log, args=(lead, "Left Message", 0), daemon=True).start()
-        if remaining == 0 and not connected:
-            threading.Thread(target=_dial_batch, daemon=True).start()
-        return "", 204
-
-    # ── human or unknown: connect to conference ──────────────────────────────────
-    if not (answered_by.startswith("machine_end") or answered_by == "fax"):
-        with _lock:
-            _s["amd_machine_start"].discard(sid)
-            already_taken = _s["connected_sid"] is not None
-            if not already_taken:
-                _s["connected_sid"] = sid
-                _s["current_lead"]  = lead
-                _s["call_start"]    = time.time()
-                _s["state"]         = "connected"
-                _s["active_calls"].pop(sid, None)
-                other_sids  = list(_s["active_calls"].keys())
-                other_leads = list(_s["active_calls"].values())
-                for s in other_sids:
-                    _s["active_calls"].pop(s, None)
-            else:
-                other_sids, other_leads = [], []
-
-        if already_taken:
-            _log(f"Late human ({lead.get('name') or sid if lead else sid}) — already connected, dropping")
-            with _lock:
-                _s["active_calls"].pop(sid, None)
-            threading.Thread(target=_hang, args=(sid,), daemon=True).start()
-            if lead:
-                threading.Thread(target=_fub_log, args=(lead, "No Answer", 0), daemon=True).start()
-        else:
-            _log(f"Human → {lead.get('name') or sid if lead else sid}")
-            for s in other_sids:
-                threading.Thread(target=_hang, args=(s,), daemon=True).start()
-            for ol in other_leads:
-                if ol:
-                    threading.Thread(target=_fub_log, args=(ol, "No Answer", 0), daemon=True).start()
-            try:
-                twilio.calls(sid).update(
-                    url=f"{PUBLIC_URL}/twiml/connect-lead?conf={conf}",
-                    method="POST",
-                )
-                threading.Thread(target=_fub_attach_url, args=(lead,), daemon=True).start()
-            except Exception as e:
-                _log(f"Connect redirect failed ({e}) — call will join via 30s fallback")
-                # Don't reset state — connected_sid stays set so completed fires correctly.
-                # The call is still in <Pause> and will join the conference at 30s.
-        return "", 204
-
-    # ── machine_end_* or fax: voicemail confirmed ────────────────────────────────
-    with _lock:
-        was_already_handled = sid in _s["amd_machine_start"]  # machine_start already dropped VM
-        _s["amd_machine_start"].discard(sid)
-        was_connected = _s["connected_sid"] == sid
-        call_duration = time.time() - (_s.get("call_start") or time.time())
-
-    # machine_start already redirected this call — if we got machine_end_beep, refine timing
-    if was_already_handled:
-        if answered_by == "machine_end_beep":
-            try:
-                twilio.calls(sid).update(
-                    url=f"{PUBLIC_URL}/twiml/voicemail-drop?pause=1",
-                    method="POST",
-                )
-            except Exception:
-                pass
-        return "", 204
-
-    # Protect a live human conversation if AMD fires very late
-    if was_connected and call_duration > 8:
-        return "", 204
-
-    _log(f"Voicemail ({answered_by}) — {lead.get('name') or sid if lead else sid}")
-
-    # Beep → drop VM immediately; silence/other → drop with longer pause; fax → hang up
-    if answered_by == "machine_end_beep":
-        drop_vm, vm_pause = True, 1
-    elif answered_by in ("machine_end_silence", "machine_end_other"):
-        drop_vm, vm_pause = True, 2
-    else:  # fax
-        drop_vm, vm_pause = False, 0
-
-    with _lock:
-        _s["active_calls"].pop(sid, None)
-        if was_connected:
-            _s["connected_sid"] = None
-            _s["current_lead"]  = None
-            _s["call_start"]    = None
-            _s["state"]         = "dialing"
-        remaining = len(_s["active_calls"])
-        connected = _s["connected_sid"]
-        _s["stats"]["voicemail"] += 1
-
-    if drop_vm:
-        try:
-            twilio.calls(sid).update(
-                url=f"{PUBLIC_URL}/twiml/voicemail-drop?pause={vm_pause}",
-                method="POST",
-            )
-            _log(f"VM drop → {lead.get('name') or sid if lead else sid}")
-            outcome = "Left Message"
-        except Exception as e:
-            _log(f"VM drop failed: {e}")
-            threading.Thread(target=_hang, args=(sid,), daemon=True).start()
-            outcome = "No Answer"
-    else:
-        threading.Thread(target=_hang, args=(sid,), daemon=True).start()
-        outcome = "No Answer"
-
-    if lead:
-        threading.Thread(target=_fub_log, args=(lead, outcome, 0), daemon=True).start()
-
-    if was_connected or (remaining == 0 and not connected):
-        threading.Thread(target=_dial_batch, daemon=True).start()
-
-    return "", 204
 
 
 @app.post("/webhook/conference")
