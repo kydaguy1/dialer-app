@@ -4,6 +4,9 @@ Power Dialer — triple-line outbound calling with FUB logging.
 Start via: bash ~/Desktop/dialer/start.sh
 """
 
+import eventlet
+eventlet.monkey_patch()
+
 import base64
 import csv
 import json as _json
@@ -15,7 +18,6 @@ import tempfile
 import threading
 import time
 import uuid
-from functools import wraps
 from pathlib import Path
 
 import requests as http
@@ -34,7 +36,7 @@ load_dotenv(Path(__file__).parent / ".env")
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", os.urandom(32))
-socketio = SocketIO(app, async_mode="threading", cors_allowed_origins="*")
+socketio = SocketIO(app, async_mode="eventlet", cors_allowed_origins="*")
 
 DIALER_PASSWORD = os.environ.get("DIALER_PASSWORD", "")
 FUB_KEY         = os.environ["FUB_API_KEY"]
@@ -107,7 +109,7 @@ def _on_mac_disconnect():
     global _mac_sid
     if _mac_sid == request.sid:
         _mac_sid = None
-        print("[dialer] Mac helper disconnected")
+        _log("Mac helper disconnected — texts will fall back to SMS")
 
 @socketio.on("text_result")
 def _on_text_result(data):
@@ -187,14 +189,15 @@ def _reset():
         "lines":           4,
         "leads":           [],
         "idx":             0,
+        "source_name":     "",        # human-readable name of the loaded list
         "conf_name":       None,
         "conf_sid":        None,
         "paused":          False,
         "send_text":       False,      # auto-text no-answer/voicemail leads via FUB
         "text_type":       "buyer",    # "buyer" or "seller"
+        "script_type":     "circle",   # "circle" or "fub"
         "agent_call_sid":  None,
         "active_calls":    {},        # sid -> lead dict
-        "amd_machine_start": set(),   # SIDs where machine_start fired — waiting on final result
         "batch_dialed_at": None,      # timestamp of last _dial_batch call — for stale-call detection
         "connected_sid":   None,
         "current_lead":    None,
@@ -208,6 +211,77 @@ def _reset():
     }
 
 _reset()
+
+# ── Session checkpoint (resume after pause/close) ──────────────────────────────
+_CHECKPOINT_PATH = Path(tempfile.gettempdir()) / "dialer_checkpoint.json"
+
+def _save_checkpoint():
+    """Save current progress so the session can be resumed later."""
+    try:
+        with _lock:
+            idx    = _s["idx"]
+            leads  = _s["leads"]
+            source = _s.get("source_name", "")
+        if idx == 0 or idx >= len(leads):
+            return  # nothing meaningful to save
+        data = {
+            "timestamp": int(time.time()),
+            "source":    source,
+            "called":    idx,
+            "total":     len(leads),
+            "leads":     leads[idx:],
+        }
+        _CHECKPOINT_PATH.write_text(_json.dumps(data))
+    except Exception as e:
+        print(f"[dialer] Checkpoint save error: {e}")
+
+def _clear_checkpoint():
+    try:
+        _CHECKPOINT_PATH.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+@app.get("/api/checkpoint")
+def api_checkpoint():
+    try:
+        if not _CHECKPOINT_PATH.exists():
+            return jsonify({"exists": False})
+        data = _json.loads(_CHECKPOINT_PATH.read_text())
+        age  = int(time.time()) - data.get("timestamp", 0)
+        if age > 86400:
+            _clear_checkpoint()
+            return jsonify({"exists": False})
+        return jsonify({
+            "exists":    True,
+            "source":    data.get("source") or "Previous session",
+            "called":    data.get("called", 0),
+            "total":     data.get("total", 0),
+            "remaining": len(data.get("leads", [])),
+            "age_min":   age // 60,
+        })
+    except Exception:
+        return jsonify({"exists": False})
+
+@app.post("/api/resume")
+def api_resume():
+    try:
+        if not _CHECKPOINT_PATH.exists():
+            return jsonify({"error": "No saved session"}), 404
+        data  = _json.loads(_CHECKPOINT_PATH.read_text())
+        leads = data.get("leads", [])
+        if not leads:
+            return jsonify({"error": "Checkpoint is empty"}), 400
+        source = data.get("source", "")
+        with _lock:
+            _reset()
+            _s["leads"]       = leads
+            _s["conf_name"]   = f"pd-{_s['id']}"
+            _s["source_name"] = source
+        _log(f"Resumed — {len(leads)} leads left (skipped {data.get('called', 0)} already dialed)")
+        return jsonify({"count": len(leads), "source": source})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 def _session_watchdog():
     """Recover from stuck sessions: no calls after 45s, or calls that never webhook back after 60s."""
@@ -312,7 +386,8 @@ def _fub_load_smart_list(smart_list_id: int | str) -> list[dict]:
                     continue
                 name = f"{p.get('firstName','').strip()} {p.get('lastName','').strip()}".strip()
                 leads.append({"phone": phone, "name": name,
-                              "address": p.get("address", "").strip()})
+                              "address": p.get("address", "").strip(),
+                              "id": p.get("id")})
             offset += limit
             if len(people) < limit:
                 break
@@ -324,16 +399,20 @@ def _fub_load_smart_list(smart_list_id: int | str) -> list[dict]:
 def _fub_attach_url(lead: dict):
     """Look up this lead's FUB person ID and attach a profile URL to the lead dict."""
     try:
-        phone  = _e164(lead.get("phone", ""))
-        r      = http.get(f"{FUB_URL}/people", auth=(FUB_KEY, ""), params={"phone": phone})
-        people = r.json().get("people", [])
-        if people:
-            pid  = people[0]["id"]
-            base = _get_fub_team_base() or "https://app.followupboss.com"
-            url  = f"{base}/2/people/view/{pid}"
-            with _lock:
-                if _s.get("current_lead") is lead:
-                    lead["fub_url"] = url
+        pid = lead.get("id")
+        if not pid:
+            phone  = _e164(lead.get("phone", ""))
+            r      = http.get(f"{FUB_URL}/people", auth=(FUB_KEY, ""), params={"phone": phone})
+            people = r.json().get("people", [])
+            if not people:
+                return
+            pid = people[0]["id"]
+            lead["id"] = pid
+        base = _get_fub_team_base() or "https://app.followupboss.com"
+        url  = f"{base}/2/people/view/{pid}"
+        with _lock:
+            if _s.get("current_lead") is lead:
+                lead["fub_url"] = url
     except Exception:
         pass
 
@@ -347,18 +426,23 @@ def _fub_log(lead: dict, outcome: str, duration: int):
         s.auth = (FUB_KEY, "")
         s.headers.update({"Content-Type": "application/json"})
 
-        r = s.get(f"{FUB_URL}/people", params={"phone": phone})
-        people = r.json().get("people", [])
-        if people:
-            pid = people[0]["id"]
-        else:
-            parts = (lead.get("name") or "Unknown").strip().split(" ", 1)
-            r = s.post(f"{FUB_URL}/people", json={
-                "firstName": parts[0],
-                "lastName":  parts[1] if len(parts) > 1 else "",
-                "phones": [{"value": phone, "type": "mobile", "isPrimary": True}],
-            })
-            pid = r.json().get("person", r.json()).get("id")
+        pid = lead.get("id")
+        if not pid:
+            r = s.get(f"{FUB_URL}/people", params={"phone": phone})
+            people = r.json().get("people", [])
+            if people:
+                pid = people[0]["id"]
+                lead["id"] = pid  # cache for future calls
+            else:
+                parts = (lead.get("name") or "Unknown").strip().split(" ", 1)
+                r = s.post(f"{FUB_URL}/people", json={
+                    "firstName": parts[0],
+                    "lastName":  parts[1] if len(parts) > 1 else "",
+                    "phones": [{"value": phone, "type": "mobile", "isPrimary": True}],
+                })
+                pid = r.json().get("person", r.json()).get("id")
+                if pid:
+                    lead["id"] = pid
 
         # Map dialer outcomes to FUB's recognized call outcomes.
         # "Interested" / "Not Interested" are real pickups; log as Conversation
@@ -384,35 +468,40 @@ def _fub_log(lead: dict, outcome: str, duration: int):
             "personId":   pid,
             "phone":      phone,
             "isIncoming": 0,
-            "fromNumber": re.sub(r"\D", "", FROM_NUMBER),
+            "fromNumber": re.sub(r"\D", "", FROM_NUMBER)[-10:],
             "duration":   int(duration or 0),
             "outcome":    fub_outcome,
         }
         if note:
             payload["note"] = note
 
-        s.post(f"{FUB_URL}/calls", json=payload)
+        call_r = s.post(f"{FUB_URL}/calls", json=payload)
         label = f"{fub_outcome} ({note})" if note else fub_outcome
-        _log(f"FUB ✓  {lead.get('name','?')} → {label}")
-
-        with _lock:
-            send_text = _s.get("send_text", False)
-        if send_text and fub_outcome in ("No Answer", "Left Message"):
-            _fub_text(lead, pid)
+        if call_r.ok:
+            _log(f"FUB ✓  {lead.get('name','?')} → {label}")
+        else:
+            _log(f"FUB ✗  {lead.get('name','?')} → {call_r.status_code}: {call_r.text[:120]}")
 
     except Exception as e:
         _log(f"FUB error: {e}")
 
+    # Auto-text runs outside the try-except so a FUB API outage doesn't block it
+    with _lock:
+        send_text = _s.get("send_text", False)
+    if send_text and outcome in ("No Answer", "Left Message") and lead.get("id"):
+        _fub_text(lead, lead["id"])
+
 
 _AUTO_TEXT_SELLER = (
-    "Hey {first}! Ky here with Bringas Home Team — just tried you. "
-    "With the equity you've built up, now could be the perfect time to see what your property is worth. "
-    "Text or call me back: (951) 447-8728 🏡"
+    "Hey {first}! Ky w/ Bringas — just tried you. "
+    "Sellers in your neighborhood are getting top dollar right now. "
+    "Don't leave money on the table — text me back: (951) 447-8728 🏡"
 )
 
 _AUTO_TEXT_BUYER = (
-    "Hey {first}! Ky here with Bringas Home Team — just tried you. "
-    "Ready to find your perfect home? Text or call me back: (951) 447-8728 🏠"
+    "Hey {first}! Ky w/ Bringas Home Team — just tried you. "
+    "Got a couple homes in your area that just hit the market and they're moving fast. "
+    "Don't miss out — text me back: (951) 447-8728 🏠"
 )
 
 # Mutable at runtime — persists across sessions until app restarts
@@ -422,29 +511,27 @@ _text_templates: dict = {
 }
 
 def _sw_sms(phone: str, body: str, name: str) -> bool:
-    """Send SMS directly via SignalWire/Twilio messaging API."""
+    """Send SMS via SignalWire using the purchased number (762-1736) which has SMS capability."""
+    sms_from = AGENT_FROM_NUMBER or FROM_NUMBER
     try:
-        twilio.messages.create(to=phone, from_=FROM_NUMBER, body=body)
-        _log(f"SMS ✓  {name} → sent via SignalWire")
+        twilio.messages.create(to=phone, from_=sms_from, body=body)
+        _log(f"SMS ✓  {name} → sent via SignalWire ({sms_from})")
         return True
     except Exception as e:
         _log(f"SMS ✗  {name} → SignalWire error: {e}")
         return False
 
 
-def _fub_note(pid: int, phone: str, body: str, name: str):
-    """Send text through FUB's system. Priority:
-    1. FUB internal API via team subdomain (sends from FUB number, shows in FUB thread)
-    2. FUB public REST API textMessages endpoint
-    3. Note fallback
-    """
+def _fub_note(pid: int, phone: str, body: str, name: str) -> bool:
+    """Try to send via FUB's texting API. Returns True if FUB actually sent the text.
+    Falls back to logging a FUB note and returns False so the caller can try SMS."""
     auth = (FUB_KEY, "")
+    from_num = os.environ.get("SIGNALWIRE_AGENT_FROM") or os.environ.get("SIGNALWIRE_FROM_NUMBER") or os.environ.get("TWILIO_FROM_NUMBER", "")
 
-    # 1. FUB internal API — same endpoint Chrome injection uses, but with API key auth
+    # 1. FUB internal API
     base = _get_fub_team_base()
     if base:
         try:
-            from_num = os.environ.get("SIGNALWIRE_FROM_NUMBER") or os.environ.get("TWILIO_FROM_NUMBER", "")
             r = http.post(
                 f"{base}/api/v1/textMessages",
                 auth=auth,
@@ -454,7 +541,7 @@ def _fub_note(pid: int, phone: str, body: str, name: str):
             )
             if r.status_code < 300:
                 _log(f"FUB text ✓  {name} → sent via FUB")
-                return
+                return True
             _log(f"FUB internal text {r.status_code} — {r.text[:80]}")
         except Exception as e:
             _log(f"FUB internal text error: {e}")
@@ -464,18 +551,20 @@ def _fub_note(pid: int, phone: str, body: str, name: str):
         r = http.post(f"{FUB_URL}/textMessages", auth=auth, json={
             "personId":   pid,
             "toNumber":   phone,
+            "fromNumber": from_num,
             "message":    body,
             "isIncoming": 0,
         }, timeout=10)
         if r.status_code < 300:
             _log(f"FUB text ✓  {name} → sent via FUB API")
-            return
-    except Exception:
-        pass
+            return True
+        _log(f"FUB public text {r.status_code} — {r.text[:120]}")
+    except Exception as e:
+        _log(f"FUB public text error: {e}")
 
-    # 3. Note fallback
+    # FUB texting unavailable — log a note so the activity still appears in FUB
     try:
-        http.post(f"{FUB_URL}/notes", auth=auth, json={
+        http.post(f"{FUB_URL}/notes", auth=(FUB_KEY, ""), json={
             "personId": pid,
             "subject":  "Auto-text sent",
             "body":     f"📱 {body}",
@@ -483,6 +572,24 @@ def _fub_note(pid: int, phone: str, body: str, name: str):
         _log(f"FUB note ✓  {name} → text logged as note")
     except Exception as e:
         _log(f"FUB note error: {e}")
+    return False
+
+
+def _twilio_sms(phone: str, body: str, name: str) -> bool:
+    """Send SMS via native Twilio REST API (separate from the SignalWire client)."""
+    tw_sid  = os.environ.get("TWILIO_ACCOUNT_SID", "")
+    tw_tok  = os.environ.get("TWILIO_AUTH_TOKEN", "")
+    tw_from = os.environ.get("TWILIO_FROM_NUMBER", "")
+    if not (tw_sid and tw_tok and tw_from):
+        return False
+    try:
+        from twilio.rest import Client as _TwilioClient
+        _TwilioClient(tw_sid, tw_tok).messages.create(to=phone, from_=tw_from, body=body)
+        _log(f"SMS ✓  {name} → sent via Twilio")
+        return True
+    except Exception as e:
+        _log(f"SMS ✗  {name} → Twilio error: {e}")
+        return False
 
 
 def _request_mac_text(pid: int, phone: str, body: str, name: str) -> bool:
@@ -520,7 +627,7 @@ def _fub_text_via_chrome(lead: dict, pid: int) -> bool:
         # names than the public REST API ('to'/'from' are rejected).
         # Each attempt is tried in turn; stop on first non-400 or on a 400
         # that isn't "Invalid fields" (which means we've reached the right shape).
-        from_num = os.environ.get("SIGNALWIRE_FROM_NUMBER") or os.environ.get("TWILIO_FROM_NUMBER", "")
+        from_num = os.environ.get("SIGNALWIRE_AGENT_FROM") or os.environ.get("SIGNALWIRE_FROM_NUMBER") or os.environ.get("TWILIO_FROM_NUMBER", "")
         payloads_b64 = base64.b64encode(_json.dumps([
             {"personId": pid, "toNumber": phone, "fromNumber": from_num, "message": body},
             {"personId": pid, "toNumber": phone, "message": body},
@@ -627,11 +734,14 @@ def _fub_text(lead: dict, pid: int):
         if sys.platform == "darwin" and _fub_text_via_chrome(lead, pid):
             return  # stats incremented inside _fub_text_via_chrome
 
-        # 3. Cloud fallback → SignalWire SMS + FUB note for activity log
-        if _sw_sms(phone, body, name):
+        # 3. Cloud fallback: try FUB texting API first; if unavailable, send via SMS
+        sent = _fub_note(pid, phone, body, name)
+        if not sent:
+            # FUB texting not enabled — try SignalWire then Twilio to actually deliver the SMS
+            sent = bool(_sw_sms(phone, body, name) or _twilio_sms(phone, body, name))
+        if sent:
             with _lock:
                 _s["stats"]["texts_sent"] += 1
-            _fub_note(pid, phone, body, name)
 
     except Exception as e:
         _log(f"Text error: {e}")
@@ -705,6 +815,7 @@ def _dial_batch():
         conf               = _s["conf_name"]
 
     _log(f"Dialing {len(batch)} leads (#{idx+1}–{idx+len(batch)} of {len(leads)})")
+    threading.Thread(target=_save_checkpoint, daemon=True).start()
 
     for lead in batch:
         try:
@@ -716,11 +827,11 @@ def _dial_batch():
                 status_callback_event=["initiated", "ringing", "answered", "completed"],
                 status_callback_method="POST",
                 timeout=30,                          # hang up after 30s of ringing (~5 ring cycles)
-                machine_detection="Enable",
-                machine_detection_timeout=12,
-                machine_detection_speech_threshold=2000,
-                machine_detection_speech_end_threshold=800,
-                machine_detection_silence_timeout=3000,
+                machine_detection="DetectMessageEnd",
+                machine_detection_timeout=30,
+                machine_detection_speech_threshold=2400,
+                machine_detection_speech_end_threshold=1200,
+                machine_detection_silence_timeout=5000,
             )
             with _lock:
                 _s["active_calls"][call.sid] = lead
@@ -743,8 +854,17 @@ def api_load():
     if "file" in request.files:
         f   = request.files["file"]
         tmp = tempfile.NamedTemporaryFile(suffix=".csv", delete=False)
-        f.save(tmp.name)
-        leads = _load_csv(tmp.name)
+        tmp.close()
+        try:
+            f.save(tmp.name)
+            leads = _load_csv(tmp.name)
+        finally:
+            try:
+                os.unlink(tmp.name)
+            except Exception:
+                pass
+        if not leads:
+            return jsonify({"error": "No phone numbers found in CSV"}), 400
     else:
         desktop = Path.home() / "Desktop"
         csvs = sorted(desktop.glob("*.csv"), key=lambda p: p.stat().st_mtime, reverse=True)
@@ -756,8 +876,10 @@ def api_load():
 
     with _lock:
         _reset()
-        _s["leads"]     = leads
-        _s["conf_name"] = f"pd-{_s['id']}"
+        _s["leads"]       = leads
+        _s["conf_name"]   = f"pd-{_s['id']}"
+        _s["source_name"] = "CSV upload"
+    _clear_checkpoint()
     _log(f"Loaded {len(leads)} leads")
     return jsonify({"count": len(leads)})
 
@@ -823,6 +945,7 @@ def api_fub_load():
                         "phone":   phone,
                         "name":    name_str,
                         "address": p.get("address", "").strip(),
+                        "id":      p.get("id"),
                     })
                 offset += limit
                 if len(people) < limit:
@@ -835,8 +958,10 @@ def api_fub_load():
 
     with _lock:
         _reset()
-        _s["leads"]     = leads
-        _s["conf_name"] = f"pd-{_s['id']}"
+        _s["leads"]       = leads
+        _s["conf_name"]   = f"pd-{_s['id']}"
+        _s["source_name"] = f"{list_type.title()}: {name}"
+    _clear_checkpoint()
     _log(f"Loaded {len(leads)} leads from {list_type}: {name}")
     return jsonify({"count": len(leads)})
 
@@ -906,6 +1031,7 @@ def api_status():
             "lines":              _s["lines"],
             "send_text":          _s.get("send_text", False),
             "text_type":          _s.get("text_type", "buyer"),
+            "script_type":        _s.get("script_type", "circle"),
             "lead":               _s.get("current_lead"),
             "remaining":          max(0, len(_s["leads"]) - _s["idx"]),
             "total":              len(_s["leads"]),
@@ -932,6 +1058,16 @@ def api_text_type():
     with _lock:
         _s["text_type"] = ttype
     return jsonify({"text_type": ttype})
+
+
+@app.post("/api/script-type")
+def api_script_type():
+    stype = (request.get_json() or {}).get("type", "circle")
+    if stype not in ("circle", "fub"):
+        stype = "circle"
+    with _lock:
+        _s["script_type"] = stype
+    return jsonify({"script_type": stype})
 
 
 @app.route("/api/text-templates", methods=["GET", "POST"])
@@ -966,6 +1102,7 @@ def api_end():
         connected_sid = _s.get("connected_sid")
     for sid in sids + ([connected_sid] if connected_sid else []) + ([agent_sid] if agent_sid else []):
         threading.Thread(target=_hang, args=(sid,), daemon=True).start()
+    _save_checkpoint()
     with _lock:
         _reset()
     return jsonify({"ok": True})
@@ -1042,14 +1179,18 @@ def twiml_inbound_agent():
 
 @app.route("/twiml/lead", methods=["GET", "POST"])
 def twiml_lead():
-    """Called by SignalWire after sync AMD completes.
-    AnsweredBy is present in the request — route machine to voicemail, human to conference."""
+    """Called by SignalWire after AMD completes (DetectMessageEnd mode).
+    For machines: greeting already finished + beeped — drop voicemail now.
+    For humans: connect to conference immediately."""
     conf        = request.values.get("conf") or _s.get("conf_name", "")
     sid         = request.values.get("CallSid", "")
     answered_by = request.values.get("AnsweredBy", "")
 
     with _lock:
         lead = _s["active_calls"].get(sid)
+
+    name_label = lead.get("name") or lead.get("phone") or sid if lead else sid
+    _log(f"AMD result: '{answered_by}' — {name_label}")
 
     r = VoiceResponse()
 
@@ -1069,11 +1210,10 @@ def twiml_lead():
             threading.Thread(target=_dial_batch, daemon=True).start()
 
         if answered_by != "fax":
-            pause = 5 if answered_by == "machine_start" else 1
-            r.pause(length=pause)
+            r.pause(length=1)
             r.say(
-                "Hi, this is Ky Ramzy with the Bringas Home Team — sorry I missed you. "
-                "I'll try to reach you again soon. Feel free to call or text me back at "
+                "Hi, this is Ky Ramzy with the Bringas Home Team — just tried to reach you. "
+                "Feel free to call or text me back at "
                 "9 5 1, 4 4 7, 8 7 2 8. That's 9 5 1, 4 4 7, 8 7 2 8. Have a great day!",
                 voice="Polly.Matthew",
                 language="en-US",
@@ -1134,8 +1274,8 @@ def twiml_voicemail_drop():
     if pause:
         r.pause(length=pause)
     r.say(
-        "Hi, this is Ky Ramzy with the Bringas Home Team — sorry I missed you. "
-        "I'll try to reach you again soon. Feel free to call or text me back at "
+        "Hi, this is Ky Ramzy with the Bringas Home Team — just tried to reach you. "
+        "Feel free to call or text me back at "
         "9 5 1, 4 4 7, 8 7 2 8. That's 9 5 1, 4 4 7, 8 7 2 8. Have a great day!",
         voice="Polly.Matthew",
         language="en-US",
@@ -1162,9 +1302,14 @@ def webhook_call():
     if is_agent:
         if status == "in-progress":
             with _lock:
-                _s["state"] = "ready"
-            _log("Your phone answered — dialing leads…")
-            threading.Thread(target=_dial_batch, daemon=True).start()
+                # twiml_inbound_agent already set state to "ready" and started _dial_batch.
+                # Only start here if state is still "calling-agent" (TwiML handler hasn't run yet).
+                should_dial = _s["state"] == "calling-agent"
+                if should_dial:
+                    _s["state"] = "ready"
+            if should_dial:
+                _log("Your phone answered — dialing leads…")
+                threading.Thread(target=_dial_batch, daemon=True).start()
         elif status in ("completed", "failed", "busy", "no-answer"):
             _log("Your phone call ended — session stopped")
             with _lock:
@@ -1344,8 +1489,79 @@ def api_callback():
             "personId": pid, "subject": "Callback Scheduled",
             "body": f"{note_text} ({due})",
         })
-        _log(f"Note ✓  {fname} → {note_text} ({due})")
-        return jsonify({"ok": True, "via": "note"})
+        if note_r.ok:
+            _log(f"Note ✓  {fname} → {note_text} ({due})")
+            return jsonify({"ok": True, "via": "note"})
+        _log(f"Callback ✗  {fname} → {note_r.status_code}: {note_r.text[:80]}")
+        return jsonify({"error": f"FUB {note_r.status_code}"}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ── Leaderboard ────────────────────────────────────────────────────────────────
+_lb_cache: dict = {}  # {"data": {...}, "ts": float}
+
+@app.get("/api/leaderboard")
+def api_leaderboard():
+    from datetime import datetime, timezone
+    global _lb_cache
+    if _lb_cache and time.time() - _lb_cache.get("ts", 0) < 60:
+        return jsonify(_lb_cache["data"])
+    try:
+        users_r = http.get(f"{FUB_URL}/users", auth=(FUB_KEY, ""), timeout=8)
+        if not users_r.ok:
+            return jsonify({"error": f"FUB users {users_r.status_code}"}), 502
+        users = {str(u["id"]): u for u in users_r.json().get("users", [])}
+
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+        def _fetch_all(path, key):
+            items, offset = [], 0
+            while offset < 2000:  # max 20 pages — guard against runaway pagination
+                r = http.get(f"{FUB_URL}/{path}", auth=(FUB_KEY, ""),
+                             params={"limit": 100, "offset": offset, "since": today}, timeout=10)
+                if not r.ok:
+                    break
+                batch = r.json().get(key, [])
+                items.extend(batch)
+                if len(batch) < 100:
+                    break
+                offset += 100
+            return items
+
+        calls = _fetch_all("calls", "calls")
+        texts = _fetch_all("textMessages", "textMessages")
+
+        stats = {uid: {"calls": 0, "convos": 0, "talk_s": 0, "texts": 0} for uid in users}
+        for call in calls:
+            uid = str(call.get("userId") or "")
+            if uid not in stats:
+                continue
+            stats[uid]["calls"] += 1
+            dur = int(call.get("duration") or 0)
+            stats[uid]["talk_s"] += dur
+            if dur >= _CONVO_THRESHOLD:
+                stats[uid]["convos"] += 1
+        for txt in texts:
+            uid = str(txt.get("userId") or txt.get("sentById") or "")
+            if uid in stats:
+                stats[uid]["texts"] += 1
+
+        rows = sorted([
+            {
+                "id":     uid,
+                "name":   users[uid].get("name", "?"),
+                "calls":  stats[uid]["calls"],
+                "convos": stats[uid]["convos"],
+                "talk_s": stats[uid]["talk_s"],
+                "texts":  stats[uid]["texts"],
+            }
+            for uid in users
+        ], key=lambda x: (x["calls"], x["convos"]), reverse=True)
+
+        data = {"ok": True, "rows": rows, "date": today, "updated": int(time.time())}
+        _lb_cache = {"data": data, "ts": time.time()}
+        return jsonify(data)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -1355,4 +1571,4 @@ if __name__ == "__main__":
     print(f"Power Dialer  →  http://localhost:{PORT}")
     print(f"Public URL    →  {PUBLIC_URL or '(not set)'}")
     _setup_inbound_webhook()
-    socketio.run(app, host="0.0.0.0", port=PORT, debug=False, allow_unsafe_werkzeug=True)
+    socketio.run(app, host="0.0.0.0", port=PORT, debug=False)

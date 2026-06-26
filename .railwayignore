@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+.git/
+auth_fub.py
+setup.py
+mac_helper_start.sh
+start.sh

@@ -244,6 +244,7 @@ html, body {
   border-radius: 4px; padding: 2px 6px; margin-bottom: 5px;
 }
 .s-tag.green  { background: #16a34a; }
+.s-tag.blue   { background: var(--blue); }
 .s-tag.amber  { background: #d97706; }
 .s-tag.red    { background: var(--red); }
 .s-tag.gray   { background: var(--gray); }
@@ -311,6 +312,73 @@ hr.s-div      { border: none; border-top: 1px solid var(--border); margin: 10px 
 /* ─── Log ─── */
 #log { font-size: 11px; color: var(--muted); font-family: ui-monospace, 'SF Mono', monospace; line-height: 1.75; max-height: 72px; overflow: hidden; }
 
+/* ─── Resume banner ─── */
+#resume-banner {
+  display: none; background: #f0fdf4; border-bottom: 1px solid #86efac;
+  padding: 10px 16px;
+}
+.resume-inner {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+}
+.resume-text { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.resume-icon { font-size: 20px; flex-shrink: 0; }
+.resume-title { font-size: 13px; font-weight: 700; color: #166534; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.resume-sub { font-size: 11px; color: #4ade80; margin-top: 1px; }
+.resume-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.resume-btn {
+  padding: 8px 16px; background: #16a34a; color: #fff; border: none;
+  border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; min-height: 36px;
+}
+.resume-btn:active { background: #15803d; }
+.resume-dismiss {
+  padding: 8px 10px; background: none; border: 1px solid #86efac;
+  border-radius: 8px; color: #4ade80; font-size: 13px; cursor: pointer; min-height: 36px;
+}
+
+/* ─── Leaderboard ─── */
+#lb-wrap { margin-top: 14px; }
+.lb-toggle {
+  width: 100%; padding: 11px 14px; background: var(--bg); border: 1.5px solid var(--border);
+  border-radius: 10px; font-size: 13px; font-weight: 600; color: var(--gray);
+  cursor: pointer; text-align: left; display: flex; align-items: center;
+  justify-content: space-between; min-height: 44px; transition: all .12s;
+}
+.lb-toggle.open { border-color: var(--purple); color: var(--purple); background: #f5f3ff; }
+#lb-body {
+  display: none; background: var(--bg); border: 1.5px solid var(--border);
+  border-radius: 10px; overflow: hidden; margin-top: 6px;
+}
+.lb-table { width: 100%; border-collapse: collapse; }
+.lb-table th {
+  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--muted); padding: 8px 10px; text-align: right; border-bottom: 1px solid var(--border);
+}
+.lb-table th:first-child, .lb-table td:first-child { text-align: left; }
+.lb-table td {
+  padding: 9px 10px; font-size: 13px; font-variant-numeric: tabular-nums;
+  text-align: right; border-bottom: 1px solid var(--border); color: var(--text);
+}
+.lb-table tr:last-child td { border-bottom: none; }
+.lb-rank { font-size: 11px; font-weight: 800; color: var(--muted); width: 20px; }
+.lb-name { font-weight: 600; font-size: 13px; }
+.lb-me td { background: #f5f3ff; }
+.lb-me .lb-name { color: var(--purple); }
+.lb-gold .lb-rank { color: #b45309; }
+.lb-calls { color: var(--blue); font-weight: 700; }
+.lb-convos { color: var(--green); }
+.lb-footer {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 7px 10px; border-top: 1px solid var(--border); background: var(--white);
+}
+.lb-updated { font-size: 10px; color: var(--muted); }
+.lb-refresh {
+  font-size: 11px; font-weight: 600; color: var(--blue); background: none;
+  border: none; cursor: pointer; padding: 2px 6px;
+}
+.lb-refresh:active { opacity: .6; }
+.lb-loading { padding: 20px; text-align: center; font-size: 13px; color: var(--muted); }
+.lb-error   { padding: 16px; text-align: center; font-size: 12px; color: var(--red); }
+
 /* ─── Footer ─── */
 .app-footer {
   display: flex; align-items: center; justify-content: center;
@@ -346,6 +414,23 @@ hr.s-div      { border: none; border-top: 1px solid var(--border); margin: 10px 
   <div class="status-strip">
     <div class="dot" id="dot"></div>
     <span id="status-text">Load leads to begin</span>
+  </div>
+
+  <!-- Resume banner -->
+  <div id="resume-banner">
+    <div class="resume-inner">
+      <div class="resume-text">
+        <span class="resume-icon">📍</span>
+        <div>
+          <div class="resume-title" id="resume-title">Resume previous session</div>
+          <div class="resume-sub"  id="resume-sub"></div>
+        </div>
+      </div>
+      <div class="resume-actions">
+        <button class="resume-btn" onclick="resumeSession()">Resume</button>
+        <button class="resume-dismiss" onclick="document.getElementById('resume-banner').style.display='none'">✕</button>
+      </div>
+    </div>
   </div>
 
   <!-- Scrollable body -->
@@ -410,13 +495,13 @@ hr.s-div      { border: none; border-top: 1px solid var(--border); margin: 10px 
         <button class="btn-cbcancel" onclick="hideCallbackPicker()">✕</button>
       </div>
       <div class="outcomes-grid">
-        <button class="btn-outcome btn-i"  onclick="next('Interested')">✓ Interested</button>
-        <button class="btn-outcome btn-ni" onclick="next('Not Interested')">✗ Not Interested</button>
-        <button class="btn-outcome btn-vm" onclick="next('Left Message')">⌛ Left Voicemail</button>
-        <button class="btn-outcome btn-sk" onclick="next('No Answer')">→ No Answer</button>
-        <button class="btn-outcome btn-cb" onclick="showCallbackPicker()">📅 Schedule Callback</button>
+        <button class="btn-outcome btn-i"  onclick="next('Interested')">✓ Interested <span style="opacity:.45;font-size:11px;font-weight:400">[1]</span></button>
+        <button class="btn-outcome btn-ni" onclick="next('Not Interested')">✗ Not Interested <span style="opacity:.45;font-size:11px;font-weight:400">[2]</span></button>
+        <button class="btn-outcome btn-vm" onclick="next('Left Message')">⌛ Left Voicemail <span style="opacity:.45;font-size:11px;font-weight:400">[3]</span></button>
+        <button class="btn-outcome btn-sk" onclick="next('No Answer')">→ No Answer <span style="opacity:.45;font-size:11px;font-weight:400">[4]</span></button>
+        <button class="btn-outcome btn-cb" onclick="showCallbackPicker()">📅 Schedule Callback <span style="opacity:.45;font-size:11px;font-weight:400">[5]</span></button>
       </div>
-      <button class="btn-hup" onclick="next('Hung Up')">✕ Hang Up &amp; Next</button>
+      <button class="btn-hup" onclick="next('Hung Up')">✕ Hang Up &amp; Next <span style="opacity:.45;font-size:12px;font-weight:400">[Enter]</span></button>
     </div>
 
     <!-- Script -->
@@ -428,6 +513,13 @@ hr.s-div      { border: none; border-top: 1px solid var(--border); margin: 10px 
 
     <!-- Settings -->
     <div class="settings">
+      <div class="setting-row">
+        <span class="setting-label">Script</span>
+        <div class="pill-toggle">
+          <button id="pill-script-circle" class="pill active" onclick="setScriptType('circle')">🏘 Circle</button>
+          <button id="pill-script-fub"    class="pill"        onclick="setScriptType('fub')">📋 FUB DB</button>
+        </div>
+      </div>
       <div class="setting-row">
         <span class="setting-label">Lines</span>
         <div class="seg-btns" id="line-btns">
@@ -490,6 +582,23 @@ hr.s-div      { border: none; border-top: 1px solid var(--border); margin: 10px 
     <!-- Log -->
     <div id="log"></div>
 
+    <!-- Leaderboard -->
+    <div id="lb-wrap">
+      <button class="lb-toggle" id="lb-toggle" onclick="toggleLeaderboard()">
+        <span>🏆 Team Leaderboard</span>
+        <span id="lb-arrow">▾</span>
+      </button>
+      <div id="lb-body">
+        <div class="lb-loading" id="lb-loading">Loading…</div>
+        <table class="lb-table" id="lb-table" style="display:none"></table>
+        <div class="lb-error" id="lb-error" style="display:none"></div>
+        <div class="lb-footer">
+          <span class="lb-updated" id="lb-updated"></span>
+          <button class="lb-refresh" onclick="loadLeaderboard(true)">↻ Refresh</button>
+        </div>
+      </div>
+    </div>
+
   </div><!-- /main-content -->
 
   <!-- Footer -->
@@ -505,6 +614,8 @@ hr.s-div      { border: none; border-top: 1px solid var(--border); margin: 10px 
 let callStart = null, polling = null, lastState = null, lastLeadKey = null;
 let leadsLoaded = 0, advanceDelay = 0, timerInterval = null, currentLead = null;
 let scriptOpen = false;
+let currentScriptType = 'circle';
+let currentLines = 3;
 
 function buildScript(lead) {
   const name   = lead && lead.name        ? lead.name                     : '___';
@@ -539,11 +650,88 @@ function buildScript(lead) {
 <span class="s-q">"Great talking to you! I'll text you that market snapshot now — it'll show recent sales nearby and what your equity looks like. My number's 951-447-8728."</span></div>`;
 }
 
+function buildFUBScript(lead) {
+  const name  = lead && lead.name ? lead.name : '___';
+  const first = lead && lead.name ? lead.name.split(' ')[0] : '___';
+  const addr  = lead && lead.address ? lead.address : 'your area';
+  return `
+<div class="s-line"><span class="s-tag green">NEW LEAD OPENER</span><br>
+<span class="s-q">"Hey <span class="s-fill">${first}</span> — this is Ky with Bringas Home Team. Quick question — you were checking out homes in <span class="s-fill">${addr}</span>. Are you still looking, or did you already find something?"</span><br>
+<div class="s-indent">
+[Still looking] → <span class="s-q">"Perfect — tell me your story. What kind of home are you after?"</span><br>
+[Found something] → <span class="s-q">"Nice, congrats! If you have friends or family looking in the area, I'd love to help."</span>
+</div></div>
+<div class="s-line"><span class="s-tag blue">OLD LEAD (2+ weeks)</span><br>
+<span class="s-q">"Hey <span class="s-fill">${first}</span>, Ky here with Bringas Home Team — a while back you were checking out homes in <span class="s-fill">${addr}</span>. Wanted to see if you're still looking, or if I should take you off my list?"</span><br>
+<div class="s-indent">
+["Burn my number"] → <span class="s-q">"Got it — did you find something, or just stop looking?"</span><br>
+[Still looking] → <span class="s-q">"Perfect — tell me where you're at. What's changed since then?"</span>
+</div></div>
+<hr class="s-div">
+<div class="s-line"><span class="s-tag green">LP MAMA FRAMEWORK</span><br>
+<span class="s-q">L — "Is <span class="s-fill">${addr}</span> where you're focused, or open to nearby areas?"</span><br>
+<span class="s-q">P — "What kind of price range are you working with?"</span><br>
+<span class="s-q">M — "Do you need to sell first, or are you good to go?"</span><br>
+<span class="s-q">A — "Are you already working with an agent? Under a signed agreement?"</span><br>
+<span class="s-q">M — "Have you talked with a lender yet? → Sean Parsons · PGS · (951) 970-6017"</span><br>
+<span class="s-q">A — "Tomorrow at 2 PM or Thursday at 10 AM for a quick buyer consult?"</span>
+</div></div>
+<hr class="s-div">
+<div class="s-line"><span class="s-tag amber">OBJ — ALREADY HAVE AN AGENT</span><br>
+<span class="s-q">"Are you under a signed buyer's agreement, or just working together casually?"</span><br>
+<div class="s-indent">
+[No contract] → <span class="s-q">"I'd love to just be a resource — would you be open to a quick 15-minute call to see what our team does differently?"</span><br>
+[Signed] → Respect it. Set CRM reminder for expiration.
+</div></div>
+<div class="s-line"><span class="s-tag amber">OBJ — NOT READY / JUST LOOKING</span><br>
+<span class="s-q">"That's totally fine — are you thinking 3 months out, 6 months, or longer?"</span><br>
+<div class="s-indent">
+[3 months] → <span class="s-q">"That's the ideal time to start so you're not rushed. Can I send you properties while we connect?"</span><br>
+[6+ months] → Set future follow-up. Drop into listings drip.
+</div></div>
+<div class="s-line"><span class="s-tag amber">OBJ — SEND ME INFO FIRST</span><br>
+<span class="s-q">"Of course — to make sure I don't send you generic stuff, can I ask 2 quick questions? Takes 2 minutes."</span><br>
+<div class="s-indent">→ Run LP MAMA. Get location + price. Confirm email. Set callback.
+</div></div>
+<hr class="s-div">
+<div class="s-line"><span class="s-tag gray">VOICEMAIL</span><br>
+<span class="s-q">"Hey <span class="s-fill">${first}</span>, Ky Ramzy with Bringas Home Team. You were checking out homes in <span class="s-fill">${addr}</span> — just wanted to connect. Call or text me back at 951-447-8728. Talk soon!"</span><br>
+<span style="font-size:11px;color:var(--muted);">Text follow-up: "Hey <span class="s-fill">${first}</span>! Ky from BHT — just left you a vm. Still looking at homes in <span class="s-fill">${addr}</span>? Happy to help!"</span></div>
+<div class="s-line"><span class="s-tag red">POWER QUESTIONS</span><br>
+<span class="s-q">"What kind of payment are you trying to stay comfortable around?"</span><br>
+<span class="s-q">"Have you talked with a lender yet, or still early in the process?"</span><br>
+<span class="s-q">"When would you want to move if the right place came up?"</span></div>`;
+}
+
 window.addEventListener('DOMContentLoaded', () => {
   populateStages();
+  checkForCheckpoint();
   setDelay(parseInt(localStorage.getItem('advanceDelay') || '0'), true);
   renderScript(null);
 });
+
+async function checkForCheckpoint() {
+  try {
+    const d = await fetch('/api/checkpoint').then(r => r.json());
+    if (!d.exists) return;
+    const banner = document.getElementById('resume-banner');
+    document.getElementById('resume-title').textContent =
+      `Resume: ${d.source} — ${d.remaining} leads left`;
+    const ago = d.age_min < 1 ? 'just now'
+              : d.age_min < 60 ? `${d.age_min}m ago`
+              : `${Math.round(d.age_min/60)}h ago`;
+    document.getElementById('resume-sub').textContent =
+      `${d.called} of ${d.total} already dialed · stopped ${ago}`;
+    banner.style.display = 'block';
+  } catch(e) {}
+}
+
+async function resumeSession() {
+  document.getElementById('resume-banner').style.display = 'none';
+  const d = await fetch('/api/resume', {method:'POST'}).then(r => r.json());
+  if (d.error) { alert(d.error); return; }
+  onLeadsLoaded(d.count);
+}
 
 function toggleScript() {
   scriptOpen = !scriptOpen;
@@ -551,8 +739,15 @@ function toggleScript() {
   document.getElementById('script-toggle').classList.toggle('open', scriptOpen);
   document.getElementById('script-arrow').textContent = scriptOpen ? '▴' : '▾';
 }
+async function setScriptType(type) {
+  currentScriptType = type;
+  document.getElementById('pill-script-circle').classList.toggle('active', type === 'circle');
+  document.getElementById('pill-script-fub').classList.toggle('active', type === 'fub');
+  await fetch('/api/script-type', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({type})});
+  renderScript(currentLead);
+}
 function renderScript(lead) {
-  document.getElementById('script-body').innerHTML = buildScript(lead);
+  document.getElementById('script-body').innerHTML = currentScriptType === 'fub' ? buildFUBScript(lead) : buildScript(lead);
 }
 
 async function setLines(n) {
@@ -621,10 +816,11 @@ async function populateStages() {
 function onLeadsLoaded(count) {
   leadsLoaded = count;
   document.getElementById('leads-label').textContent = `${count} leads loaded`;
-  document.getElementById('btn-start').disabled = false;
+  document.getElementById('btn-start').disabled = count === 0;
   setStatus('idle', `${count} leads ready — tap Start Session`);
   showPlaceholder('Ready to dial ' + count + ' leads');
   updateProgress(0, count);
+  document.getElementById('resume-banner').style.display = 'none';
 }
 
 async function startSession() {
@@ -668,7 +864,7 @@ async function poll() {
 }
 
 function updateUI(d) {
-  const {state, paused, lines, send_text, text_type, lead, remaining, total, active, stats, log: logs, mac_helper} = d;
+  const {state, paused, lines, send_text, text_type, script_type, lead, remaining, total, active, stats, log: logs, mac_helper} = d;
 
   const badge = document.getElementById('mac-badge');
   if (mac_helper !== undefined) {
@@ -679,10 +875,17 @@ function updateUI(d) {
     document.getElementById('toggle-text').checked = send_text;
     document.getElementById('toggle-text-row').classList.toggle('on', send_text);
     document.getElementById('text-type-row').style.display = send_text ? 'flex' : 'none';
+    document.getElementById('text-edit-row').style.display = send_text ? 'block' : 'none';
+    if (send_text) loadTextTemplates();
   }
   if (text_type) {
     document.getElementById('pill-buyer').classList.toggle('active', text_type === 'buyer');
     document.getElementById('pill-seller').classList.toggle('active', text_type === 'seller');
+  }
+  if (script_type !== undefined) {
+    document.getElementById('pill-script-circle').classList.toggle('active', script_type === 'circle');
+    document.getElementById('pill-script-fub').classList.toggle('active', script_type === 'fub');
+    currentScriptType = script_type;
   }
   if (paused !== undefined) {
     const btn = document.getElementById('btn-pause');
@@ -690,6 +893,7 @@ function updateUI(d) {
     btn.classList.toggle('paused', paused);
   }
   if (lines) {
+    currentLines = lines;
     document.querySelectorAll('#line-btns .seg-btn').forEach((b, i) => b.classList.toggle('active', i + 1 === lines));
   }
   ['called','answered','no_answer','voicemail'].forEach(k => {
@@ -730,6 +934,7 @@ function updateUI(d) {
     currentLead = lead;
     renderScript(lead);
     if (!timerInterval) { callStart = Date.now(); startCallTimer(); }
+    if (!scriptOpen) toggleScript();
   } else if (state === 'done') {
     setStatus('done', `Done! ${stats.called} dialed · ${stats.answered} answered`);
     document.getElementById('outcomes').style.display = 'none';
@@ -766,7 +971,7 @@ async function next(outcome, skipDelay) {
     }
   }
   setStatus('dialing', 'Logged — dialing next…');
-  showDialIndicator(3);
+  showDialIndicator(currentLines);
   await fetch('/api/next', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({outcome, duration})});
 }
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -804,7 +1009,7 @@ function showLead(lead) {
   document.getElementById('dial-indicator').style.display   = 'none';
   document.getElementById('lead-info').style.display        = 'block';
   document.getElementById('lead-name').textContent    = lead.name    || 'Unknown';
-  document.getElementById('lead-phone').textContent   = lead.phone   || '';
+  document.getElementById('lead-phone').textContent   = fmtPhone(lead.phone);
   document.getElementById('lead-address').textContent = lead.address || '';
   const tagsEl   = document.getElementById('lead-tags');
   const equityEl = document.getElementById('lead-equity');
@@ -854,6 +1059,10 @@ function setStatus(type, msg) {
   document.getElementById('dot').className           = 'dot ' + type;
   document.getElementById('status-text').textContent = msg;
 }
+function fmtPhone(p) {
+  const d = (p || '').replace(/\D/g, '').replace(/^1/, '');
+  return d.length === 10 ? `(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}` : (p || '');
+}
 function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
@@ -861,11 +1070,14 @@ function esc(s) {
 // ── Text template editor ──────────────────────────────────────────────────────
 let _textTemplates = {buyer: '', seller: ''};
 let _currentTextType = 'buyer';
+let _templatesLoaded = false;
 
-async function loadTextTemplates() {
+async function loadTextTemplates(force) {
+  if (_templatesLoaded && !force) return;
   try {
     const d = await fetch('/api/text-templates').then(r => r.json());
     _textTemplates = d.templates || _textTemplates;
+    _templatesLoaded = true;
     refreshTextEditor();
   } catch(e) {}
 }
@@ -876,6 +1088,7 @@ function refreshTextEditor() {
 }
 
 async function saveTextTemplate() {
+  const btn  = event.target;  // capture before await — event becomes stale after async
   const area = document.getElementById('text-edit-area');
   const val = area ? area.value.trim() : '';
   if (!val) return;
@@ -885,7 +1098,6 @@ async function saveTextTemplate() {
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({[_currentTextType]: val}),
   });
-  const btn = event.target;
   btn.textContent = '✓ Saved';
   setTimeout(() => { btn.textContent = 'Save'; }, 1500);
 }
@@ -895,7 +1107,7 @@ const _origSetAutoText = setAutoText;
 setAutoText = async function(enabled) {
   await _origSetAutoText(enabled);
   document.getElementById('text-edit-row').style.display = enabled ? 'block' : 'none';
-  if (enabled) { await loadTextTemplates(); }
+  if (enabled) { await loadTextTemplates(true); }
 };
 
 const _origSetTextType = setTextType;
@@ -906,6 +1118,115 @@ setTextType = async function(type) {
 };
 
 loadTextTemplates();
+
+// ── Leaderboard ─────────────────────────────────────────────────────────────
+let _lbOpen = false, _lbTimer = null, _lbUpdated = 0;
+
+function toggleLeaderboard() {
+  _lbOpen = !_lbOpen;
+  const body = document.getElementById('lb-body');
+  const btn  = document.getElementById('lb-toggle');
+  const arr  = document.getElementById('lb-arrow');
+  body.style.display = _lbOpen ? 'block' : 'none';
+  btn.classList.toggle('open', _lbOpen);
+  arr.textContent = _lbOpen ? '▴' : '▾';
+  if (_lbOpen) {
+    loadLeaderboard();
+    if (!_lbTimer) _lbTimer = setInterval(() => { if (_lbOpen) loadLeaderboard(); }, 60000);
+  } else {
+    clearInterval(_lbTimer); _lbTimer = null;
+  }
+}
+
+async function loadLeaderboard(force) {
+  if (!_lbOpen) return;
+  const age = (Date.now() / 1000) - _lbUpdated;
+  if (!force && age < 55) { _renderLbAge(); return; }
+  document.getElementById('lb-loading').style.display = 'block';
+  document.getElementById('lb-table').style.display   = 'none';
+  document.getElementById('lb-error').style.display   = 'none';
+  try {
+    const d = await fetch('/api/leaderboard').then(r => r.json());
+    document.getElementById('lb-loading').style.display = 'none';
+    if (d.error) {
+      document.getElementById('lb-error').textContent = d.error;
+      document.getElementById('lb-error').style.display = 'block';
+      return;
+    }
+    _lbUpdated = d.updated || (Date.now() / 1000);
+    _renderLbTable(d.rows || []);
+    _renderLbAge();
+  } catch(e) {
+    document.getElementById('lb-loading').style.display = 'none';
+    document.getElementById('lb-error').textContent = 'Could not load leaderboard';
+    document.getElementById('lb-error').style.display = 'block';
+  }
+}
+
+function _fmtTalk(s) {
+  if (!s) return '—';
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+  return h ? `${h}h ${m}m` : `${m}m`;
+}
+
+function _renderLbTable(rows) {
+  const tbl = document.getElementById('lb-table');
+  if (!rows.length) { tbl.style.display = 'none'; return; }
+  let html = '<thead><tr>'
+    + '<th>#</th><th style="min-width:90px">Agent</th>'
+    + '<th>Calls</th><th>Convos</th><th>Talk</th><th>Texts</th>'
+    + '</tr></thead><tbody>';
+  const myName = 'Ramzy';
+  rows.forEach((r, i) => {
+    const isMe = r.name.includes(myName);
+    const gold = i === 0 ? 'lb-gold' : '';
+    const me   = isMe    ? 'lb-me'   : '';
+    const first = esc(r.name.split(' ')[0]);
+    html += `<tr class="${gold} ${me}">
+      <td class="lb-rank">${i+1}</td>
+      <td class="lb-name">${first}</td>
+      <td class="lb-calls">${r.calls}</td>
+      <td class="lb-convos">${r.convos || '—'}</td>
+      <td style="color:var(--gray)">${_fmtTalk(r.talk_s)}</td>
+      <td style="color:var(--purple)">${r.texts || '—'}</td>
+    </tr>`;
+  });
+  html += '</tbody>';
+  tbl.innerHTML = html;
+  tbl.style.display = 'table';
+}
+
+function _renderLbAge() {
+  const el = document.getElementById('lb-updated');
+  if (!_lbUpdated) { el.textContent = ''; return; }
+  const s = Math.round(Date.now() / 1000 - _lbUpdated);
+  el.textContent = s < 60 ? 'Updated just now' : `Updated ${Math.floor(s/60)}m ago`;
+}
+
+// Kick off age label refresh every 30s
+setInterval(_renderLbAge, 30000);
+
+// Keyboard shortcuts — only active when outcomes panel is visible (connected state)
+document.addEventListener('keydown', function(e) {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
+  const outcomes = document.getElementById('outcomes');
+  if (!outcomes || outcomes.style.display === 'none') return;
+  const cbPicker = document.getElementById('callback-picker');
+  const cbVisible = cbPicker && cbPicker.style.display !== 'none';
+  if (cbVisible) {
+    if (e.key === 'Escape') { hideCallbackPicker(); e.preventDefault(); }
+    return;
+  }
+  switch (e.key) {
+    case '1': next('Interested');     e.preventDefault(); break;
+    case '2': next('Not Interested'); e.preventDefault(); break;
+    case '3': next('Left Message');   e.preventDefault(); break;
+    case '4': next('No Answer');      e.preventDefault(); break;
+    case '5': showCallbackPicker();   e.preventDefault(); break;
+    case 'Enter':
+    case ' ':  next('Hung Up');       e.preventDefault(); break;
+  }
+});
 </script>
 </body>
 </html>
