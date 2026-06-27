@@ -539,6 +539,13 @@ hr.s-div      { border: none; border-top: 1px solid var(--border); margin: 10px 
         </div>
       </div>
       <div class="setting-row">
+        <span class="setting-label">FUB Stage</span>
+        <div class="pill-toggle">
+          <button id="pill-stage-lead"    class="pill active" onclick="setFubStage('')">Lead</button>
+          <button id="pill-stage-nurture" class="pill"        onclick="setFubStage('Nurture1yr+ 90Days')">Nurture 90d+</button>
+        </div>
+      </div>
+      <div class="setting-row">
         <span class="setting-label"></span>
         <label class="toggle-wrap" id="toggle-text-row" for="toggle-text">
           <input type="checkbox" id="toggle-text" onchange="setAutoText(this.checked)">
@@ -762,6 +769,11 @@ function setDelay(n, silent) {
   btns[1].classList.toggle('active', n === 2);
   btns[2].classList.toggle('active', n === 5);
 }
+async function setFubStage(stage) {
+  document.getElementById('pill-stage-lead').classList.toggle('active', stage === '');
+  document.getElementById('pill-stage-nurture').classList.toggle('active', stage !== '');
+  await fetch('/api/fub-stage', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({stage})});
+}
 async function setAutoText(enabled) {
   document.getElementById('toggle-text-row').classList.toggle('on', enabled);
   document.getElementById('text-type-row').style.display = enabled ? 'flex' : 'none';
@@ -891,6 +903,10 @@ function updateUI(d) {
     const btn = document.getElementById('btn-pause');
     btn.textContent = paused ? '▶ Resume' : '⏸ Pause';
     btn.classList.toggle('paused', paused);
+  }
+  if (d.fub_stage !== undefined) {
+    document.getElementById('pill-stage-lead').classList.toggle('active', d.fub_stage === '');
+    document.getElementById('pill-stage-nurture').classList.toggle('active', d.fub_stage !== '');
   }
   if (lines) {
     currentLines = lines;

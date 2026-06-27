@@ -435,11 +435,14 @@ def _fub_log(lead: dict, outcome: str, duration: int):
                 lead["id"] = pid  # cache for future calls
             else:
                 parts = (lead.get("name") or "Unknown").strip().split(" ", 1)
-                r = s.post(f"{FUB_URL}/people", json={
+                new_person = {
                     "firstName": parts[0],
                     "lastName":  parts[1] if len(parts) > 1 else "",
                     "phones": [{"value": phone, "type": "mobile", "isPrimary": True}],
-                })
+                }
+                if _fub_stage:
+                    new_person["stage"] = _fub_stage
+                r = s.post(f"{FUB_URL}/people", json=new_person)
                 pid = r.json().get("person", r.json()).get("id")
                 if pid:
                     lead["id"] = pid
@@ -509,6 +512,7 @@ _text_templates: dict = {
     "buyer":  _AUTO_TEXT_BUYER,
     "seller": _AUTO_TEXT_SELLER,
 }
+_fub_stage: str = ""   # FUB stage to set when creating new contacts ("" = FUB default = Lead)
 
 def _sw_sms(phone: str, body: str, name: str) -> bool:
     """Send SMS via SignalWire using the purchased number (762-1736) which has SMS capability."""
@@ -1039,6 +1043,7 @@ def api_status():
             "stats":              dict(_s["stats"]),
             "log":                _s["log"][:6],
             "mac_helper":         _mac_sid is not None,
+            "fub_stage":          _fub_stage,
         })
 
 
@@ -1058,6 +1063,13 @@ def api_text_type():
     with _lock:
         _s["text_type"] = ttype
     return jsonify({"text_type": ttype})
+
+
+@app.post("/api/fub-stage")
+def api_fub_stage():
+    global _fub_stage
+    _fub_stage = (request.get_json() or {}).get("stage", "")
+    return jsonify({"fub_stage": _fub_stage})
 
 
 @app.post("/api/script-type")
