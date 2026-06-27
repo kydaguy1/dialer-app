@@ -1075,7 +1075,7 @@ def api_fub_stage():
 @app.post("/api/script-type")
 def api_script_type():
     stype = (request.get_json() or {}).get("type", "circle")
-    if stype not in ("circle", "fub"):
+    if stype not in ("circle", "fub", "expired"):
         stype = "circle"
     with _lock:
         _s["script_type"] = stype

@@ -516,8 +516,9 @@ hr.s-div      { border: none; border-top: 1px solid var(--border); margin: 10px 
       <div class="setting-row">
         <span class="setting-label">Script</span>
         <div class="pill-toggle">
-          <button id="pill-script-circle" class="pill active" onclick="setScriptType('circle')">🏘 Circle</button>
-          <button id="pill-script-fub"    class="pill"        onclick="setScriptType('fub')">📋 FUB DB</button>
+          <button id="pill-script-circle"  class="pill active" onclick="setScriptType('circle')">🏘 Circle</button>
+          <button id="pill-script-fub"     class="pill"        onclick="setScriptType('fub')">📋 FUB DB</button>
+          <button id="pill-script-expired" class="pill"        onclick="setScriptType('expired')">⏰ Expired</button>
         </div>
       </div>
       <div class="setting-row">
@@ -710,6 +711,42 @@ function buildFUBScript(lead) {
 <span class="s-q">"When would you want to move if the right place came up?"</span></div>`;
 }
 
+function buildExpiredScript(lead) {
+  const name    = lead && lead.name    ? lead.name                 : '___';
+  const first   = lead && lead.name    ? lead.name.split(' ')[0]   : '___';
+  const addr    = lead && lead.address ? lead.address              : 'your property';
+  const details = lead && lead.why_call ? esc(lead.why_call)       : '';
+  return `
+<div class="s-line"><span class="s-tag green">OPENER</span>
+${details ? `<div style="font-size:11px;color:var(--gray);margin-bottom:6px;font-style:italic">${details}</div>` : ''}
+<span class="s-q">"Hi, is this <span class="s-fill">${name}</span>? — This is Ky with Bringas Home Team. Quick call — your listing at <span class="s-fill">${addr}</span> recently came off the market. I'm not here to badmouth your last agent — I just wanted to see if selling is still on your radar, or if you've decided to hold off?"</span><br>
+<div class="s-indent">
+[Still want to sell] → <span class="s-q">"Got it. Can I ask — did your agent give you a clear breakdown of why it didn't sell?"</span><br>
+[Holding off] → <span class="s-q">"That makes sense. Is it more about the price you were expecting, or the experience with the process itself?"</span>
+</div></div>
+<hr class="s-div">
+<div class="s-line"><span class="s-tag green">PAIN + PIVOT</span><br>
+<span class="s-q">"The #1 reason homes expire is usually one of three things: price, marketing, or agent effort — sometimes all three. I specialize in re-listing expired homes and I've had a lot of success getting them sold. I'd love to show you what I'd do differently."</span></div>
+<div class="s-line"><span class="s-tag green">DIFFERENTIATION</span><br>
+<span class="s-q">"We do professional photography, targeted digital ads, and I personally work buyers who've toured similar homes nearby. It's not just putting it on the MLS and hoping."</span></div>
+<hr class="s-div">
+<div class="s-line"><span class="s-tag amber">OBJ — DONE WITH AGENTS</span><br>
+<span class="s-q">"I completely understand — that's the most common thing I hear. What specifically went wrong?"</span><br>
+<div class="s-indent">
+[Listen] → <span class="s-q">"That's exactly what I'd fix. Would you be open to a 20-minute meeting so I can show you our plan side by side with what was done before?"</span>
+</div></div>
+<div class="s-line"><span class="s-tag amber">OBJ — WANT TO WAIT</span><br>
+<span class="s-q">"Totally fair. How long are you thinking? [Pause] What would need to change in the market for you to feel good re-listing? I ask because some sellers wait and end up in a softer market — I'd hate to see that happen to you."</span></div>
+<div class="s-line"><span class="s-tag amber">OBJ — ALREADY RELISTED</span><br>
+<span class="s-q">"Oh perfect — when did you go back on? Best of luck, I hope it flies! If anything changes, keep my number: 951-447-8728."</span></div>
+<hr class="s-div">
+<div class="s-line"><span class="s-tag blue">CLOSE — GET THE APPOINTMENT</span><br>
+<span class="s-q">"Here's what I'd love to do — a free re-listing analysis: what went wrong last time, what I'd do differently, and a realistic price for right now. Takes about 20 minutes at your place. Would this week or early next week work for a quick walkthrough?"</span></div>
+<hr class="s-div">
+<div class="s-line"><span class="s-tag gray">VOICEMAIL</span><br>
+<span class="s-q">"Hey <span class="s-fill">${first}</span>, Ky Ramzy here with Bringas Home Team. I saw your listing at <span class="s-fill">${addr}</span> came off the market and wanted to connect — I specialize in re-listing homes that didn't sell the first time, usually just 1 or 2 things need to change. Call or text me at 951-447-8728. Talk soon!"</span></div>`;
+}
+
 window.addEventListener('DOMContentLoaded', () => {
   populateStages();
   checkForCheckpoint();
@@ -748,13 +785,17 @@ function toggleScript() {
 }
 async function setScriptType(type) {
   currentScriptType = type;
-  document.getElementById('pill-script-circle').classList.toggle('active', type === 'circle');
-  document.getElementById('pill-script-fub').classList.toggle('active', type === 'fub');
+  document.getElementById('pill-script-circle').classList.toggle('active',  type === 'circle');
+  document.getElementById('pill-script-fub').classList.toggle('active',     type === 'fub');
+  document.getElementById('pill-script-expired').classList.toggle('active', type === 'expired');
   await fetch('/api/script-type', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({type})});
   renderScript(currentLead);
 }
 function renderScript(lead) {
-  document.getElementById('script-body').innerHTML = currentScriptType === 'fub' ? buildFUBScript(lead) : buildScript(lead);
+  const body = document.getElementById('script-body');
+  if (currentScriptType === 'fub')     { body.innerHTML = buildFUBScript(lead);     return; }
+  if (currentScriptType === 'expired') { body.innerHTML = buildExpiredScript(lead); return; }
+  body.innerHTML = buildScript(lead);
 }
 
 async function setLines(n) {
@@ -896,8 +937,9 @@ function updateUI(d) {
     document.getElementById('pill-seller').classList.toggle('active', text_type === 'seller');
   }
   if (script_type !== undefined) {
-    document.getElementById('pill-script-circle').classList.toggle('active', script_type === 'circle');
-    document.getElementById('pill-script-fub').classList.toggle('active', script_type === 'fub');
+    document.getElementById('pill-script-circle').classList.toggle('active',  script_type === 'circle');
+    document.getElementById('pill-script-fub').classList.toggle('active',     script_type === 'fub');
+    document.getElementById('pill-script-expired').classList.toggle('active', script_type === 'expired');
     currentScriptType = script_type;
   }
   if (paused !== undefined) {
