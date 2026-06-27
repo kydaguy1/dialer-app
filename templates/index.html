@@ -862,10 +862,11 @@ async function endSession() {
   document.getElementById('btn-end').style.display     = 'none';
   document.getElementById('btn-pause').style.display   = 'none';
   document.getElementById('callin-row').style.display  = 'none';
-  document.getElementById('btn-start').disabled = leadsLoaded === 0;
+  leadsLoaded = 0;
+  document.getElementById('btn-start').disabled = true;
   document.getElementById('outcomes').style.display    = 'none';
   setStatus('idle', 'Session ended');
-  showPlaceholder('Session ended');
+  showPlaceholder('Session ended — reload CSV to dial again');
   lastState = null;
 }
 
