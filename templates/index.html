@@ -752,6 +752,9 @@ window.addEventListener('DOMContentLoaded', () => {
   checkForCheckpoint();
   setDelay(parseInt(localStorage.getItem('advanceDelay') || '0'), true);
   renderScript(null);
+  // Sync server state (stage, lines, script type) on load so a server restart
+  // doesn't leave the UI showing stale settings.
+  poll();
 });
 
 async function checkForCheckpoint() {

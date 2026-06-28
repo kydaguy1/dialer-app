@@ -442,8 +442,11 @@ def _fub_log(lead: dict, outcome: str, duration: int):
                 }
                 if _fub_stage:
                     new_person["stage"] = _fub_stage
+                _log(f"FUB create  {lead.get('name','?')} → stage='{_fub_stage or 'Lead (default)'}'")
                 r = s.post(f"{FUB_URL}/people", json=new_person)
-                pid = r.json().get("person", r.json()).get("id")
+                rj = r.json()
+                _log(f"FUB create  response {r.status_code}: {str(rj)[:120]}")
+                pid = rj.get("person", rj).get("id")
                 if pid:
                     lead["id"] = pid
 
@@ -1515,27 +1518,44 @@ _lb_cache: dict = {}  # {"data": {...}, "ts": float}
 
 @app.get("/api/leaderboard")
 def api_leaderboard():
-    from datetime import datetime, timezone
+    from datetime import datetime, timezone, timedelta
     global _lb_cache
     if _lb_cache and time.time() - _lb_cache.get("ts", 0) < 60:
         return jsonify(_lb_cache["data"])
     try:
+        # Use Pacific time so "today" matches the agent's calendar day
+        try:
+            from zoneinfo import ZoneInfo
+            tz = ZoneInfo("America/Los_Angeles")
+        except Exception:
+            tz = timezone(timedelta(hours=-7))
+        now_local   = datetime.now(tz)
+        today_str   = now_local.strftime("%Y-%m-%d")          # e.g. "2026-06-28"
+        today_start = datetime(now_local.year, now_local.month, now_local.day,
+                               tzinfo=tz).astimezone(timezone.utc)
+        since_param = today_start.strftime("%Y-%m-%dT%H:%M:%SZ")
+
         users_r = http.get(f"{FUB_URL}/users", auth=(FUB_KEY, ""), timeout=8)
         if not users_r.ok:
             return jsonify({"error": f"FUB users {users_r.status_code}"}), 502
         users = {str(u["id"]): u for u in users_r.json().get("users", [])}
 
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-
         def _fetch_all(path, key):
             items, offset = [], 0
-            while offset < 2000:  # max 20 pages — guard against runaway pagination
+            while offset < 2000:
                 r = http.get(f"{FUB_URL}/{path}", auth=(FUB_KEY, ""),
-                             params={"limit": 100, "offset": offset, "since": today}, timeout=10)
+                             params={"limit": 100, "offset": offset, "since": since_param},
+                             timeout=10)
                 if not r.ok:
                     break
                 batch = r.json().get(key, [])
-                items.extend(batch)
+                # Extra safety: keep only records whose timestamp starts with today's date
+                filtered = []
+                for item in batch:
+                    ts = item.get("createdAt") or item.get("loggedAt") or item.get("updatedAt") or ""
+                    if ts[:10] == today_str:
+                        filtered.append(item)
+                items.extend(filtered)
                 if len(batch) < 100:
                     break
                 offset += 100
@@ -1559,6 +1579,7 @@ def api_leaderboard():
             if uid in stats:
                 stats[uid]["texts"] += 1
 
+        # Only include agents who have at least one call or text today
         rows = sorted([
             {
                 "id":     uid,
@@ -1569,9 +1590,10 @@ def api_leaderboard():
                 "texts":  stats[uid]["texts"],
             }
             for uid in users
+            if stats[uid]["calls"] > 0 or stats[uid]["texts"] > 0
         ], key=lambda x: (x["calls"], x["convos"]), reverse=True)
 
-        data = {"ok": True, "rows": rows, "date": today, "updated": int(time.time())}
+        data = {"ok": True, "rows": rows, "date": today_str, "updated": int(time.time())}
         _lb_cache = {"data": data, "ts": time.time()}
         return jsonify(data)
     except Exception as e:
