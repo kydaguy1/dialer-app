@@ -213,7 +213,10 @@ def _reset():
 _reset()
 
 # ── Session checkpoint (resume after pause/close) ──────────────────────────────
-_CHECKPOINT_PATH = Path(tempfile.gettempdir()) / "dialer_checkpoint.json"
+_CHECKPOINT_PATH  = Path(tempfile.gettempdir()) / "dialer_checkpoint.json"
+_DIALED_LOG_PATH  = Path(tempfile.gettempdir()) / "dialer_recent.json"
+_REDIAL_COOLDOWN  = 3600   # seconds — skip a number if dialed within this window
+_dialed: dict     = {}     # E.164 phone → unix timestamp of last outbound dial attempt
 
 def _save_checkpoint():
     """Save current progress so the session can be resumed later."""
@@ -240,6 +243,30 @@ def _clear_checkpoint():
         _CHECKPOINT_PATH.unlink(missing_ok=True)
     except Exception:
         pass
+
+
+def _load_dialed_log():
+    global _dialed
+    try:
+        if _DIALED_LOG_PATH.exists():
+            data = _json.loads(_DIALED_LOG_PATH.read_text())
+            now  = time.time()
+            _dialed = {ph: ts for ph, ts in data.items() if now - ts < _REDIAL_COOLDOWN}
+            if _dialed:
+                print(f"[dialer] Loaded {len(_dialed)} recently-dialed numbers from disk")
+    except Exception:
+        _dialed = {}
+
+
+def _save_dialed_log():
+    try:
+        now = time.time()
+        with _lock:
+            fresh = {ph: ts for ph, ts in _dialed.items() if now - ts < _REDIAL_COOLDOWN}
+        _DIALED_LOG_PATH.write_text(_json.dumps(fresh))
+    except Exception as e:
+        print(f"[dialer] Dialed log save error: {e}")
+
 
 @app.get("/api/checkpoint")
 def api_checkpoint():
@@ -315,6 +342,7 @@ def _session_watchdog():
 
 # Detect team URL in background so it's ready by first page load
 threading.Thread(target=_get_fub_team_base, daemon=True).start()
+_load_dialed_log()
 threading.Thread(target=_session_watchdog, daemon=True).start()
 
 
@@ -827,10 +855,19 @@ def _dial_batch():
     _log(f"Dialing {len(batch)} leads (#{idx+1}–{idx+len(batch)} of {len(leads)})")
     threading.Thread(target=_save_checkpoint, daemon=True).start()
 
+    now = time.time()
+    calls_made = 0
     for lead in batch:
+        phone = _e164(lead.get("phone", ""))
+        with _lock:
+            last = _dialed.get(phone, 0)
+        if now - last < _REDIAL_COOLDOWN:
+            mins = int((now - last) / 60)
+            _log(f"Skip (called {mins}m ago)  {lead.get('name') or phone}")
+            continue
         try:
             call = twilio.calls.create(
-                to=_e164(lead["phone"]),
+                to=phone,
                 from_=FROM_NUMBER,
                 url=f"{PUBLIC_URL}/twiml/lead?conf={conf}",
                 status_callback=f"{PUBLIC_URL}/webhook/call",
@@ -846,9 +883,22 @@ def _dial_batch():
             with _lock:
                 _s["active_calls"][call.sid] = lead
                 _s["stats"]["called"] += 1
+                _dialed[phone] = now
+            calls_made += 1
             _log(f"Ringing  {lead['name'] or lead['phone']}")
         except Exception as e:
             _log(f"Dial error {lead['phone']}: {e}")
+
+    if calls_made == 0:
+        # All leads in this batch were recently dialed — skip forward immediately
+        with _lock:
+            has_more = _s["idx"] < len(_s["leads"])
+            if has_more:
+                _s["state"] = "ready"
+        if has_more:
+            threading.Thread(target=_dial_batch, daemon=True).start()
+    else:
+        threading.Thread(target=_save_dialed_log, daemon=True).start()
 
 
 # ── Routes ─────────────────────────────────────────────────────────────────────
