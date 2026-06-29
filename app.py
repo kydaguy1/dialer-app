@@ -122,17 +122,18 @@ def _on_text_result(data):
 
 
 def _setup_inbound_webhook() -> None:
-    """Point the owned SignalWire number's inbound voice URL at this app so the agent
+    """Point the owned phone number's inbound voice URL at this app so the agent
     can call in rather than being called out."""
-    if not USE_SIGNALWIRE or not PUBLIC_URL:
+    if not PUBLIC_URL:
         return
-    number = os.environ.get("SIGNALWIRE_AGENT_FROM", "")
+    number = AGENT_FROM_NUMBER
     if not number:
         return
     try:
         matches = twilio.incoming_phone_numbers.list(phone_number=number)
         if not matches:
-            print(f"[dialer] WARNING: {number} not found in SignalWire account")
+            provider = "SignalWire" if USE_SIGNALWIRE else "Twilio"
+            print(f"[dialer] WARNING: {number} not found in {provider} account")
             return
         matches[0].update(
             voice_url=f"{PUBLIC_URL}/twiml/inbound-agent",
@@ -1033,7 +1034,7 @@ def api_start():
         if not _s["leads"]:
             return jsonify({"error": "Load leads first"}), 400
         _s["state"] = "calling-agent"
-    call_in = os.environ.get("SIGNALWIRE_AGENT_FROM", "")
+    call_in = AGENT_FROM_NUMBER
     _log(f"Session ready — call {call_in} from your phone to begin")
     return jsonify({"ok": True, "call_in": call_in})
 
