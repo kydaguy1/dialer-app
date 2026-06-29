@@ -518,8 +518,8 @@ _text_templates: dict = {
     "buyer":  _AUTO_TEXT_BUYER,
     "seller": _AUTO_TEXT_SELLER,
 }
-_fub_stage: str = ""       # FUB stage to set when creating new contacts ("" = FUB default = Lead)
-_fub_no_create: bool = False  # When True, skip creating new FUB contacts for unknown numbers
+_fub_stage: str = os.environ.get("FUB_STAGE", "")
+_fub_no_create: bool = os.environ.get("FUB_NO_CREATE", "").lower() in ("1", "true", "yes")
 
 def _sw_sms(phone: str, body: str, name: str) -> bool:
     """Send SMS via SignalWire using the purchased number (762-1736) which has SMS capability."""
