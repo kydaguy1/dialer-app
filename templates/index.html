@@ -1009,12 +1009,13 @@ function updateUI(d) {
     document.getElementById('lead-card').classList.remove('active');
     stopCallTimer();
   } else if (state === 'idle') {
-    setStatus('idle', 'Session ended');
+    const wasActive = lastState !== null;
+    setStatus('idle', wasActive ? 'Session ended' : 'Load leads to begin');
     document.getElementById('btn-end').style.display   = 'none';
     document.getElementById('btn-pause').style.display = 'none';
     document.getElementById('btn-start').disabled = leadsLoaded === 0;
     document.getElementById('outcomes').style.display  = 'none';
-    showPlaceholder('Session ended');
+    if (wasActive) showPlaceholder('Session ended');
     stopPolling(); stopCallTimer();
     lastState = null;
   }

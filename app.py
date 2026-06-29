@@ -40,7 +40,7 @@ socketio = SocketIO(app, async_mode="eventlet", cors_allowed_origins="*")
 
 DIALER_PASSWORD = os.environ.get("DIALER_PASSWORD", "")
 FUB_KEY         = os.environ["FUB_API_KEY"]
-PUBLIC_URL      = os.environ.get("PUBLIC_URL", "").rstrip("/")
+PUBLIC_URL      = (os.environ.get("PUBLIC_URL") or os.environ.get("DIALER_URL", "")).rstrip("/")
 USE_SIGNALWIRE = os.environ.get("USE_SIGNALWIRE", "").lower() in ("1", "true", "yes")
 
 if USE_SIGNALWIRE:
@@ -186,7 +186,7 @@ def _reset():
     _s = {
         "id":              str(uuid.uuid4())[:8],
         "state":           "idle",    # idle|ready|dialing|connected|done
-        "lines":           4,
+        "lines":           3,
         "leads":           [],
         "idx":             0,
         "source_name":     "",        # human-readable name of the loaded list
@@ -1602,7 +1602,10 @@ def api_leaderboard():
 
 if __name__ == "__main__":
     PORT = int(os.environ.get("PORT", 5001))
+    if not PUBLIC_URL:
+        print("WARNING: PUBLIC_URL is not set — webhook callbacks will fail. "
+              "Set PUBLIC_URL=https://your-railway-url.up.railway.app")
     print(f"Power Dialer  →  http://localhost:{PORT}")
-    print(f"Public URL    →  {PUBLIC_URL or '(not set)'}")
+    print(f"Public URL    →  {PUBLIC_URL or '(not set — BROKEN)'}")
     _setup_inbound_webhook()
     socketio.run(app, host="0.0.0.0", port=PORT, debug=False)
