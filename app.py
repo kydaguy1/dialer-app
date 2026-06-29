@@ -741,11 +741,10 @@ def _fub_text(lead: dict, pid: int):
         if sys.platform == "darwin" and _fub_text_via_chrome(lead, pid):
             return  # stats incremented inside _fub_text_via_chrome
 
-        # 3. Cloud fallback: try FUB texting API first; if unavailable, send via SMS
+        # 3. Cloud fallback: try FUB texting API first; if unavailable, send via SignalWire SMS
         sent = _fub_note(pid, phone, body, name)
         if not sent:
-            # FUB texting not enabled — try SignalWire then Twilio to actually deliver the SMS
-            sent = bool(_sw_sms(phone, body, name) or _twilio_sms(phone, body, name))
+            sent = _sw_sms(phone, body, name)
         if sent:
             with _lock:
                 _s["stats"]["texts_sent"] += 1
@@ -1044,7 +1043,7 @@ def api_status():
             "total":              len(_s["leads"]),
             "active":             len(_s["active_calls"]),
             "stats":              dict(_s["stats"]),
-            "log":                _s["log"][:6],
+            "log":                _s["log"][:10],
             "mac_helper":         _mac_sid is not None,
             "fub_stage":          _fub_stage,
         })
