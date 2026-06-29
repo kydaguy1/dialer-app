@@ -793,11 +793,21 @@ function toggleScript() {
   document.getElementById('script-toggle').classList.toggle('open', scriptOpen);
   document.getElementById('script-arrow').textContent = scriptOpen ? '▴' : '▾';
 }
-async function setScriptType(type) {
-  currentScriptType = type;
+function _detectScriptType(lead) {
+  const why = ((lead && lead.why_call) || '').toLowerCase();
+  if (why.startsWith('expired')) return 'expired';
+  if (why.startsWith('fsbo'))    return 'circle';
+  if (!why && lead && lead.id)   return 'fub';
+  return null; // no signal — keep current
+}
+function _applyScriptPills(type) {
   document.getElementById('pill-script-circle').classList.toggle('active',  type === 'circle');
   document.getElementById('pill-script-fub').classList.toggle('active',     type === 'fub');
   document.getElementById('pill-script-expired').classList.toggle('active', type === 'expired');
+}
+async function setScriptType(type) {
+  currentScriptType = type;
+  _applyScriptPills(type);
   await fetch('/api/script-type', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({type})});
   renderScript(currentLead);
 }
@@ -953,10 +963,8 @@ function updateUI(d) {
     document.getElementById('pill-seller').classList.toggle('active', text_type === 'seller');
   }
   if (script_type !== undefined) {
-    document.getElementById('pill-script-circle').classList.toggle('active',  script_type === 'circle');
-    document.getElementById('pill-script-fub').classList.toggle('active',     script_type === 'fub');
-    document.getElementById('pill-script-expired').classList.toggle('active', script_type === 'expired');
     currentScriptType = script_type;
+    _applyScriptPills(script_type);
   }
   if (paused !== undefined) {
     const btn = document.getElementById('btn-pause');
@@ -1012,6 +1020,11 @@ function updateUI(d) {
     showDialIndicator(0);
     showLead(lead);
     currentLead = lead;
+    const autoType = _detectScriptType(lead);
+    if (autoType && autoType !== currentScriptType) {
+      currentScriptType = autoType;
+      _applyScriptPills(autoType);
+    }
     renderScript(lead);
     if (!timerInterval) { callStart = Date.now(); startCallTimer(); }
     if (!scriptOpen) toggleScript();
