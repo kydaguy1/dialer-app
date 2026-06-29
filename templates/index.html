@@ -809,6 +809,7 @@ function renderScript(lead) {
 }
 
 async function setLines(n) {
+  currentLines = n;
   document.querySelectorAll('#line-btns .seg-btn').forEach((b, i) => b.classList.toggle('active', i + 1 === n));
   await fetch('/api/lines', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({lines:n})});
 }
@@ -991,6 +992,7 @@ function updateUI(d) {
   if (state === 'connected' && lead) updateFubUrl(lead);
 
   const leadKey = lead ? (lead.id || lead.phone || null) : null;
+  const prevState = lastState;
   if (state === lastState && state !== 'dialing' && leadKey === lastLeadKey) return;
   lastState = state; lastLeadKey = leadKey;
 
@@ -1025,7 +1027,7 @@ function updateUI(d) {
     document.getElementById('lead-card').classList.remove('active');
     stopCallTimer();
   } else if (state === 'idle') {
-    const wasActive = lastState !== null;
+    const wasActive = prevState !== null;
     setStatus('idle', wasActive ? 'Session ended' : 'Load leads to begin');
     document.getElementById('btn-end').style.display   = 'none';
     document.getElementById('btn-pause').style.display = 'none';

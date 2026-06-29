@@ -497,7 +497,7 @@ def _fub_log(lead: dict, outcome: str, duration: int):
     # Auto-text runs outside the try-except so a FUB API outage doesn't block it
     with _lock:
         send_text = _s.get("send_text", False)
-    if send_text and outcome in ("No Answer", "Left Message") and lead.get("id"):
+    if send_text and outcome in ("No Answer", "Left Message") and lead and lead.get("id"):
         _fub_text(lead, lead["id"])
 
 
