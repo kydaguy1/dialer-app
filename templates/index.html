@@ -547,6 +547,13 @@ hr.s-div      { border: none; border-top: 1px solid var(--border); margin: 10px 
         </div>
       </div>
       <div class="setting-row">
+        <span class="setting-label">New Contacts</span>
+        <div class="pill-toggle">
+          <button id="pill-create-yes" class="pill active" onclick="setFubNoCreate(false)">Create + Log</button>
+          <button id="pill-create-no"  class="pill"        onclick="setFubNoCreate(true)">Log Only</button>
+        </div>
+      </div>
+      <div class="setting-row">
         <span class="setting-label"></span>
         <label class="toggle-wrap" id="toggle-text-row" for="toggle-text">
           <input type="checkbox" id="toggle-text" onchange="setAutoText(this.checked)">
@@ -818,6 +825,11 @@ async function setFubStage(stage) {
   document.getElementById('pill-stage-nurture').classList.toggle('active', stage !== '');
   await fetch('/api/fub-stage', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({stage})});
 }
+async function setFubNoCreate(no_create) {
+  document.getElementById('pill-create-yes').classList.toggle('active', !no_create);
+  document.getElementById('pill-create-no').classList.toggle('active', no_create);
+  await fetch('/api/fub-no-create', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({no_create})});
+}
 async function setAutoText(enabled) {
   document.getElementById('toggle-text-row').classList.toggle('on', enabled);
   document.getElementById('text-type-row').style.display = enabled ? 'flex' : 'none';
@@ -953,6 +965,10 @@ function updateUI(d) {
   if (d.fub_stage !== undefined) {
     document.getElementById('pill-stage-lead').classList.toggle('active', d.fub_stage === '');
     document.getElementById('pill-stage-nurture').classList.toggle('active', d.fub_stage !== '');
+  }
+  if (d.fub_no_create !== undefined) {
+    document.getElementById('pill-create-yes').classList.toggle('active', !d.fub_no_create);
+    document.getElementById('pill-create-no').classList.toggle('active',   d.fub_no_create);
   }
   if (lines) {
     currentLines = lines;

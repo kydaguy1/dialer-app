@@ -434,6 +434,9 @@ def _fub_log(lead: dict, outcome: str, duration: int):
                 pid = people[0]["id"]
                 lead["id"] = pid  # cache for future calls
             else:
+                if _fub_no_create:
+                    _log(f"FUB skip  {lead.get('name','?')} — not in FUB, contact creation disabled")
+                    return
                 parts = (lead.get("name") or "Unknown").strip().split(" ", 1)
                 new_person = {
                     "firstName": parts[0],
@@ -515,7 +518,8 @@ _text_templates: dict = {
     "buyer":  _AUTO_TEXT_BUYER,
     "seller": _AUTO_TEXT_SELLER,
 }
-_fub_stage: str = ""   # FUB stage to set when creating new contacts ("" = FUB default = Lead)
+_fub_stage: str = ""       # FUB stage to set when creating new contacts ("" = FUB default = Lead)
+_fub_no_create: bool = False  # When True, skip creating new FUB contacts for unknown numbers
 
 def _sw_sms(phone: str, body: str, name: str) -> bool:
     """Send SMS via SignalWire using the purchased number (762-1736) which has SMS capability."""
@@ -1046,6 +1050,7 @@ def api_status():
             "log":                _s["log"][:10],
             "mac_helper":         _mac_sid is not None,
             "fub_stage":          _fub_stage,
+            "fub_no_create":      _fub_no_create,
         })
 
 
@@ -1072,6 +1077,13 @@ def api_fub_stage():
     global _fub_stage
     _fub_stage = (request.get_json() or {}).get("stage", "")
     return jsonify({"fub_stage": _fub_stage})
+
+
+@app.post("/api/fub-no-create")
+def api_fub_no_create():
+    global _fub_no_create
+    _fub_no_create = bool((request.get_json() or {}).get("no_create", False))
+    return jsonify({"fub_no_create": _fub_no_create})
 
 
 @app.post("/api/script-type")
