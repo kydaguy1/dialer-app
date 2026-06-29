@@ -731,7 +731,7 @@ def _fub_text(lead: dict, pid: int):
         phone    = _e164(lead.get("phone", ""))
         name     = lead.get("name", "?")
 
-        # 1. Mac helper connected via WebSocket → Chrome injection on the Mac
+        # 1. Mac helper connected via polling → Chrome injection on the Mac
         if _mac_sid and _request_mac_text(pid, phone, body, name):
             with _lock:
                 _s["stats"]["texts_sent"] += 1
