@@ -635,7 +635,7 @@ _text_templates: dict = {
     "seller": _AUTO_TEXT_SELLER,
 }
 _fub_stage: str = os.environ.get("FUB_STAGE", "")
-_fub_no_create: bool = os.environ.get("FUB_NO_CREATE", "").lower() in ("1", "true", "yes")
+_fub_no_create: bool = os.environ.get("FUB_NO_CREATE", "true").lower() not in ("0", "false", "no")
 
 def _sw_sms(phone: str, body: str, name: str) -> bool:
     """Send SMS via SignalWire using the purchased number (762-1736) which has SMS capability."""
