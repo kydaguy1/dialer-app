@@ -998,13 +998,17 @@ def _dial_batch():
                 _log(f"Dial error {lead['phone']}: {e}")
 
     if calls_made == 0:
-        # All leads in this batch were recently dialed — skip forward immediately
+        # All leads in this batch were skipped — advance or finish
         with _lock:
             has_more = _s["idx"] < len(_s["leads"])
             if has_more:
                 _s["state"] = "ready"
+            else:
+                _s["state"] = "done"
         if has_more:
             threading.Thread(target=_dial_batch, daemon=True).start()
+        else:
+            _log("All leads skipped or already dialed — session complete")
     else:
         threading.Thread(target=_save_dialed_log, daemon=True).start()
         threading.Thread(target=_save_call_log, daemon=True).start()
@@ -1020,28 +1024,31 @@ def index():
 
 @app.post("/api/load")
 def api_load():
-    if "file" in request.files:
-        f   = request.files["file"]
-        tmp = tempfile.NamedTemporaryFile(suffix=".csv", delete=False)
-        tmp.close()
-        try:
-            f.save(tmp.name)
-            leads = _load_csv(tmp.name)
-        finally:
+    try:
+        if "file" in request.files:
+            f   = request.files["file"]
+            tmp = tempfile.NamedTemporaryFile(suffix=".csv", delete=False)
+            tmp.close()
             try:
-                os.unlink(tmp.name)
-            except Exception:
-                pass
-        if not leads:
-            return jsonify({"error": "No phone numbers found in CSV"}), 400
-    else:
-        desktop = Path.home() / "Desktop"
-        csvs = sorted(desktop.glob("*.csv"), key=lambda p: p.stat().st_mtime, reverse=True)
-        if not csvs:
-            return jsonify({"error": "No CSV found on Desktop"}), 400
-        leads = _load_csv(csvs[0])
-        if not leads:
-            return jsonify({"error": "CSV has no phone numbers"}), 400
+                f.save(tmp.name)
+                leads = _load_csv(tmp.name)
+            finally:
+                try:
+                    os.unlink(tmp.name)
+                except Exception:
+                    pass
+            if not leads:
+                return jsonify({"error": "No phone numbers found in CSV"}), 400
+        else:
+            desktop = Path.home() / "Desktop"
+            csvs = sorted(desktop.glob("*.csv"), key=lambda p: p.stat().st_mtime, reverse=True)
+            if not csvs:
+                return jsonify({"error": "No CSV found on Desktop"}), 400
+            leads = _load_csv(csvs[0])
+            if not leads:
+                return jsonify({"error": "CSV has no phone numbers"}), 400
+    except Exception as e:
+        return jsonify({"error": f"Could not read CSV: {e}"}), 400
 
     with _lock:
         _reset()
@@ -1387,38 +1394,49 @@ def twiml_probe():
 def twiml_inbound_agent():
     """Agent calls the dialer number to join the conference session."""
     sid = request.values.get("CallSid", "")
-    r   = VoiceResponse()
+    caller = request.values.get("From", "?")
+    print(f"[dialer] Inbound call from {caller} (SID={sid})")
+    r = VoiceResponse()
+    try:
+        with _lock:
+            conf  = _s.get("conf_name")
+            state = _s["state"]
 
-    with _lock:
-        conf  = _s.get("conf_name")
-        state = _s["state"]
+        if not conf or state in ("idle", "done"):
+            r.say("No active session. Open the dialer first, then call back.",
+                  voice="Polly.Matthew", language="en-US")
+            r.hangup()
+            return Response(str(r), mimetype="text/xml")
 
-    if not conf or state == "idle":
-        r.say("No active session. Open the dialer first, then call back.",
-              voice="Polly.Matthew", language="en-US")
+        with _lock:
+            _s["agent_call_sid"] = sid
+
+        if state == "calling-agent":
+            with _lock:
+                _s["state"] = "ready"
+            _log("Agent joined via call-in — starting dialing session…")
+            threading.Thread(target=_dial_batch, daemon=True).start()
+        else:
+            _log(f"Agent rejoined conference (state={state})")
+
+        d = Dial()
+        d.conference(
+            conf,
+            start_conference_on_enter=False,
+            end_conference_on_exit=True,
+            beep=False,
+            wait_url=f"{PUBLIC_URL}/twiml/silence",
+            status_callback=f"{PUBLIC_URL}/webhook/conference",
+            status_callback_event="join leave end",
+            status_callback_method="POST",
+            muted=False,
+        )
+        r.append(d)
+    except Exception as e:
+        print(f"[dialer] inbound-agent error: {e}")
+        r = VoiceResponse()
+        r.say("An error occurred. Please try again.", voice="Polly.Matthew", language="en-US")
         r.hangup()
-        return Response(str(r), mimetype="text/xml")
-
-    with _lock:
-        _s["agent_call_sid"] = sid
-        _s["state"]          = "ready"
-
-    _log("Agent joined via call-in — starting dialing session…")
-    threading.Thread(target=_dial_batch, daemon=True).start()
-
-    d = Dial()
-    d.conference(
-        conf,
-        start_conference_on_enter=False,
-        end_conference_on_exit=True,
-        beep=False,
-        wait_url=f"{PUBLIC_URL}/twiml/silence",
-        status_callback=f"{PUBLIC_URL}/webhook/conference",
-        status_callback_event="join leave end",
-        status_callback_method="POST",
-        muted=False,
-    )
-    r.append(d)
     return Response(str(r), mimetype="text/xml")
 
 
@@ -1427,6 +1445,15 @@ def twiml_lead():
     """Called by SignalWire after AMD completes (DetectMessageEnd mode).
     For machines: greeting already finished + beeped — drop voicemail now.
     For humans: connect to conference immediately."""
+    try:
+        return _twiml_lead_inner()
+    except Exception as e:
+        print(f"[dialer] twiml/lead error: {e}")
+        r = VoiceResponse()
+        r.hangup()
+        return Response(str(r), mimetype="text/xml")
+
+def _twiml_lead_inner():
     conf        = request.values.get("conf") or _s.get("conf_name", "")
     sid         = request.values.get("CallSid", "")
     answered_by = request.values.get("AnsweredBy", "")
@@ -1521,7 +1548,7 @@ def twiml_voicemail_drop():
     r.say(
         "Hi, this is Ky Ramzy with the Bringas Home Team — just tried to reach you. "
         "Feel free to call or text me back at "
-        "9 5 1, 7 6 2, 1 7 3 6. That's 9 5 1, 7 6 2, 1 7 3 6. Have a great day!",
+        "9 5 1, 4 4 7, 8 7 2 8. That's 9 5 1, 4 4 7, 8 7 2 8. Have a great day!",
         voice="Polly.Matthew",
         language="en-US",
     )

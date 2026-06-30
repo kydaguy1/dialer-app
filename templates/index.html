@@ -961,10 +961,20 @@ async function endSession() {
   lastState = null;
 }
 
-function startPolling() { polling = setInterval(poll, 1000); }
+function startPolling() { if (!polling) polling = setInterval(poll, 1000); }
 function stopPolling()  { if (polling) { clearInterval(polling); polling = null; } }
 async function poll() {
-  try { updateUI(await fetch('/api/status').then(r => r.json())); } catch(e) {}
+  try {
+    const d = await fetch('/api/status').then(r => r.json());
+    updateUI(d);
+    // Auto-restart polling if session is active but interval isn't running
+    if (!polling && d.state && d.state !== 'idle' && d.state !== 'done') {
+      startPolling();
+    }
+  } catch(e) {
+    const el = document.getElementById('status-text');
+    if (el && el.textContent.indexOf('…') === -1) el.textContent += ' …';
+  }
 }
 
 let _callLogCountFetched = false;
@@ -991,6 +1001,7 @@ function updateUI(d) {
     if (send_text) loadTextTemplates();
   }
   if (text_type) {
+    _currentTextType = text_type;
     document.getElementById('pill-buyer').classList.toggle('active', text_type === 'buyer');
     document.getElementById('pill-seller').classList.toggle('active', text_type === 'seller');
   }
