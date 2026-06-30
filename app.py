@@ -1163,6 +1163,7 @@ def api_start():
                     from_=from_num,
                     url=f"{PUBLIC_URL}/twiml/agent-phone?conf={conf}",
                     status_callback=f"{PUBLIC_URL}/webhook/call",
+                    status_callback_event=["answered", "completed"],
                     status_callback_method="POST",
                 )
                 with _lock:
@@ -1358,8 +1359,23 @@ def twiml_silence():
 
 @app.route("/twiml/agent-phone", methods=["GET", "POST"])
 def twiml_agent_phone():
-    """Legacy outbound agent call (kept as fallback)."""
+    """Called by SignalWire when the agent answers the outbound call from the system."""
     conf = request.values.get("conf", "")
+    sid  = request.values.get("CallSid", "")
+
+    # Agent answered — transition state and start dialing immediately.
+    # (status_callback "in-progress" is not guaranteed; trigger here instead.)
+    with _lock:
+        if sid:
+            _s["agent_call_sid"] = sid
+        should_dial = _s["state"] == "calling-agent"
+        if should_dial:
+            _s["state"] = "ready"
+
+    if should_dial:
+        _log("Your phone answered — dialing leads…")
+        threading.Thread(target=_dial_batch, daemon=True).start()
+
     r = VoiceResponse()
     d = Dial()
     d.conference(
