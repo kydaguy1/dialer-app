@@ -868,6 +868,8 @@ async function clearCallLog() {
 async function setAutoText(enabled) {
   document.getElementById('toggle-text-row').classList.toggle('on', enabled);
   document.getElementById('text-type-row').style.display = enabled ? 'flex' : 'none';
+  document.getElementById('text-edit-row').style.display = enabled ? 'block' : 'none';
+  if (enabled) loadTextTemplates();
   await fetch('/api/send-text', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({enabled})});
 }
 async function setTextType(type) {
