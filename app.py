@@ -429,6 +429,9 @@ threading.Thread(target=_get_fub_team_base, daemon=True).start()
 _load_dialed_log()
 _load_call_log()
 threading.Thread(target=_session_watchdog, daemon=True).start()
+# Ensure the inbound webhook is configured on every startup (runs in background so it
+# doesn't block app startup when gunicorn imports this module on Railway)
+threading.Thread(target=_setup_inbound_webhook, daemon=True).start()
 
 
 def _log(msg: str):
