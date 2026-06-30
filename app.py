@@ -550,9 +550,6 @@ def _fub_log(lead: dict, outcome: str, duration: int):
                 pid = people[0]["id"]
                 lead["id"] = pid  # cache for future calls
             else:
-                if _fub_no_create:
-                    _log(f"FUB skip  {lead.get('name','?')} — not in FUB, contact creation disabled")
-                    return
                 parts = (lead.get("name") or "Unknown").strip().split(" ", 1)
                 new_person = {
                     "firstName": parts[0],
