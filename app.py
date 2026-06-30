@@ -617,13 +617,13 @@ def _fub_log(lead: dict, outcome: str, duration: int):
 _AUTO_TEXT_SELLER = (
     "Hey {first}! Ky w/ Bringas — just tried you. "
     "Sellers in your neighborhood are getting top dollar right now. "
-    "Don't leave money on the table — text me back: (951) 762-1736 🏡"
+    "Don't leave money on the table — text me back: (951) 447-8728 🏡"
 )
 
 _AUTO_TEXT_BUYER = (
     "Hey {first}! Ky w/ Bringas Home Team — just tried you. "
     "Got a couple homes in your area that just hit the market and they're moving fast. "
-    "Don't miss out — text me back: (951) 762-1736 🏠"
+    "Don't miss out — text me back: (951) 447-8728 🏠"
 )
 
 # Mutable at runtime — persists across sessions until app restarts
@@ -1486,7 +1486,7 @@ def _twiml_lead_inner():
             r.say(
                 "Hi, this is Ky Ramzy with the Bringas Home Team — just tried to reach you. "
                 "Feel free to call or text me back at "
-                "9 5 1, 7 6 2, 1 7 3 6. That's 9 5 1, 7 6 2, 1 7 3 6. Have a great day!",
+                "9 5 1, 4 4 7, 8 7 2 8. That's 9 5 1, 4 4 7, 8 7 2 8. Have a great day!",
                 voice="Polly.Matthew",
                 language="en-US",
             )
@@ -1548,7 +1548,7 @@ def twiml_voicemail_drop():
     r.say(
         "Hi, this is Ky Ramzy with the Bringas Home Team — just tried to reach you. "
         "Feel free to call or text me back at "
-        "9 5 1, 7 6 2, 1 7 3 6. That's 9 5 1, 7 6 2, 1 7 3 6. Have a great day!",
+        "9 5 1, 4 4 7, 8 7 2 8. That's 9 5 1, 4 4 7, 8 7 2 8. Have a great day!",
         voice="Polly.Matthew",
         language="en-US",
     )
