@@ -1480,7 +1480,14 @@ def _twiml_lead_inner():
     answered_by = request.values.get("AnsweredBy", "")
 
     with _lock:
-        lead = _s["active_calls"].get(sid)
+        lead          = _s["active_calls"].get(sid)
+        connected_sid = _s.get("connected_sid")
+
+    # Stale webhook from a previous session — not in active_calls and not the connected call
+    if lead is None and sid != connected_sid:
+        r = VoiceResponse()
+        r.hangup()
+        return Response(str(r), mimetype="text/xml")
 
     name_label = lead.get("name") or lead.get("phone") or sid if lead else sid
     _log(f"AMD result: '{answered_by}' — {name_label}")
