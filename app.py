@@ -1149,6 +1149,27 @@ def api_start():
         if not _s["leads"]:
             return jsonify({"error": "Load leads first"}), 400
         _s["state"] = "calling-agent"
+        conf = _s.get("conf_name")
+
+    agent_phone = os.environ.get("MY_PHONE_NUMBER", "")
+    if agent_phone:
+        try:
+            call = twilio.calls.create(
+                to=agent_phone,
+                from_=AGENT_FROM_NUMBER,
+                url=f"{PUBLIC_URL}/twiml/agent-phone?conf={conf}",
+                status_callback=f"{PUBLIC_URL}/webhook/call",
+                status_callback_event=["initiated", "ringing", "answered", "completed"],
+                status_callback_method="POST",
+            )
+            with _lock:
+                _s["agent_call_sid"] = call.sid
+            _log("Calling your phone — answer to start dialing…")
+            return jsonify({"ok": True, "call_in": None})
+        except Exception as e:
+            print(f"[dialer] outbound agent call failed: {e}")
+            _log(f"Could not auto-dial your phone — call {AGENT_FROM_NUMBER} manually")
+
     call_in = AGENT_FROM_NUMBER
     _log(f"Session ready — call {call_in} from your phone to begin")
     return jsonify({"ok": True, "call_in": call_in})

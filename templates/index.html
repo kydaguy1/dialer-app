@@ -934,17 +934,22 @@ async function startSession() {
     document.getElementById('btn-start').disabled = false;
     return;
   }
-  const num = d.call_in || '+19517621736';
   const callinRow  = document.getElementById('callin-row');
   const callinLink = document.getElementById('callin-link');
-  callinLink.href  = `tel:${num}`;
-  callinLink.textContent = num.replace('+1','').replace(/(\d{3})(\d{3})(\d{4})/,'($1) $2-$3');
-  callinRow.style.display  = 'block';
+  if (d.call_in) {
+    callinLink.href = `tel:${d.call_in}`;
+    callinLink.textContent = d.call_in.replace('+1','').replace(/(\d{3})(\d{3})(\d{4})/,'($1) $2-$3');
+    callinRow.style.display = 'block';
+    setStatus('calling-agent', 'Tap the number above to call in');
+    showPlaceholder('Waiting for you to call in…');
+  } else {
+    callinRow.style.display = 'none';
+    setStatus('calling-agent', 'Your phone is ringing — answer to start dialing…');
+    showPlaceholder('Answer your phone to begin…');
+  }
   document.getElementById('btn-end').style.display    = 'inline-block';
   document.getElementById('btn-pause').style.display  = 'inline-block';
   document.getElementById('stats').style.display      = 'flex';
-  setStatus('calling-agent', 'Tap the number above to call in');
-  showPlaceholder('Waiting for you to call in…');
   startPolling();
 }
 async function endSession() {
@@ -1052,8 +1057,9 @@ function updateUI(d) {
   lastState = state; lastLeadKey = leadKey;
 
   if (state === 'calling-agent') {
-    setStatus('calling-agent', 'Tap the number above to call in');
-    showPlaceholder('Waiting for you to call in…');
+    const callinVisible = document.getElementById('callin-row').style.display === 'block';
+    setStatus('calling-agent', callinVisible ? 'Tap the number above to call in' : 'Your phone is ringing — answer to start dialing…');
+    showPlaceholder(callinVisible ? 'Waiting for you to call in…' : 'Answer your phone to begin…');
   } else if (state === 'dialing') {
     setStatus('dialing', `Ringing ${active} line${active !== 1 ? 's' : ''} — ${remaining} left`);
     document.getElementById('outcomes').style.display = 'none';
