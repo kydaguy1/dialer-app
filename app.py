@@ -1168,7 +1168,7 @@ def api_start():
             return jsonify({"ok": True, "call_in": None})
         except Exception as e:
             print(f"[dialer] outbound agent call failed: {e}")
-            _log(f"Could not auto-dial your phone — call {AGENT_FROM_NUMBER} manually")
+            _log(f"Auto-dial error: {e}")
 
     call_in = AGENT_FROM_NUMBER
     _log(f"Session ready — call {call_in} from your phone to begin")
