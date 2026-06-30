@@ -139,10 +139,10 @@ def _on_text_result(data):
 
 
 def _setup_inbound_webhook() -> None:
-    """Point the owned SignalWire number's inbound voice URL at this app."""
-    if not USE_SIGNALWIRE or not PUBLIC_URL:
+    """Point the owned phone number's inbound voice URL at this app."""
+    if not PUBLIC_URL:
         return
-    number = os.environ.get("SIGNALWIRE_AGENT_FROM", "")
+    number = AGENT_FROM_NUMBER
     space  = os.environ.get("SIGNALWIRE_SPACE_URL", "")
     proj   = os.environ.get("SIGNALWIRE_PROJECT_ID", "")
     tok    = os.environ.get("SIGNALWIRE_API_TOKEN", "")
@@ -160,7 +160,8 @@ def _setup_inbound_webhook() -> None:
                               status_callback_method="POST")
             print(f"[dialer] Inbound webhook set (SDK) → {voice_url}")
             return
-        print(f"[dialer] WARNING: {number} not found via SDK — trying REST fallback")
+        provider = "SignalWire" if USE_SIGNALWIRE else "Twilio"
+        print(f"[dialer] WARNING: {number} not found via SDK ({provider}) — trying REST fallback")
     except Exception as e:
         print(f"[dialer] SDK webhook update failed ({e}) — trying REST fallback")
 
@@ -1141,7 +1142,7 @@ def api_start():
         if not _s["leads"]:
             return jsonify({"error": "Load leads first"}), 400
         _s["state"] = "calling-agent"
-    call_in = os.environ.get("SIGNALWIRE_AGENT_FROM", "")
+    call_in = AGENT_FROM_NUMBER
     _log(f"Session ready — call {call_in} from your phone to begin")
     return jsonify({"ok": True, "call_in": call_in})
 
@@ -1343,6 +1344,43 @@ def twiml_agent_phone():
     )
     r.append(d)
     return Response(str(r), mimetype="text/xml")
+
+
+@app.get("/twiml/probe")
+def twiml_probe():
+    """Public diagnostic endpoint — shows webhook config state and re-attempts setup."""
+    lines = []
+    lines.append(f"PUBLIC_URL: {PUBLIC_URL or '(not set)'}")
+    lines.append(f"AGENT_FROM_NUMBER: {AGENT_FROM_NUMBER or '(not set)'}")
+    lines.append(f"USE_SIGNALWIRE: {USE_SIGNALWIRE}")
+    if not PUBLIC_URL:
+        lines.append("ERROR: PUBLIC_URL is not set — cannot configure webhook")
+        return "\n".join(lines), 200, {"Content-Type": "text/plain"}
+    if not AGENT_FROM_NUMBER:
+        lines.append("ERROR: AGENT_FROM_NUMBER is not set")
+        return "\n".join(lines), 200, {"Content-Type": "text/plain"}
+    try:
+        matches = twilio.incoming_phone_numbers.list(phone_number=AGENT_FROM_NUMBER)
+        if not matches:
+            lines.append(f"ERROR: {AGENT_FROM_NUMBER} not found in account")
+        else:
+            num = matches[0]
+            lines.append(f"Number found: {num.phone_number}")
+            lines.append(f"Current voice_url: {num.voice_url or '(none)'}")
+            target = f"{PUBLIC_URL}/twiml/inbound-agent"
+            if num.voice_url != target:
+                num.update(
+                    voice_url=target,
+                    voice_method="POST",
+                    status_callback=f"{PUBLIC_URL}/webhook/call",
+                    status_callback_method="POST",
+                )
+                lines.append(f"FIXED: voice_url updated to {target}")
+            else:
+                lines.append(f"OK: voice_url already correct")
+    except Exception as e:
+        lines.append(f"ERROR: {e}")
+    return "\n".join(lines), 200, {"Content-Type": "text/plain"}
 
 
 @app.route("/twiml/inbound-agent", methods=["GET", "POST"])
