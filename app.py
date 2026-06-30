@@ -1383,7 +1383,14 @@ def twiml_probe():
     lines = []
     lines.append(f"PUBLIC_URL: {PUBLIC_URL or '(not set)'}")
     lines.append(f"AGENT_FROM_NUMBER: {AGENT_FROM_NUMBER or '(not set)'}")
+    lines.append(f"FROM_NUMBER: {FROM_NUMBER or '(not set)'}")
     lines.append(f"USE_SIGNALWIRE: {USE_SIGNALWIRE}")
+
+    my_phone = os.environ.get("MY_PHONE_NUMBER", "")
+    lines.append(f"MY_PHONE_NUMBER: {my_phone or '(NOT SET — auto-dial disabled)'}")
+    if not my_phone:
+        lines.append("WARNING: MY_PHONE_NUMBER is not set — system cannot call your phone on Start")
+
     if not PUBLIC_URL:
         lines.append("ERROR: PUBLIC_URL is not set — cannot configure webhook")
         return "\n".join(lines), 200, {"Content-Type": "text/plain"}
@@ -1392,15 +1399,16 @@ def twiml_probe():
         return "\n".join(lines), 200, {"Content-Type": "text/plain"}
     try:
         matches = twilio.incoming_phone_numbers.list(phone_number=AGENT_FROM_NUMBER)
-        if not matches:
+        # Filter to the specific number in case SDK returns all numbers unfiltered
+        match = next((m for m in matches if m.phone_number == AGENT_FROM_NUMBER), None) or (matches[0] if matches else None)
+        if not match:
             lines.append(f"ERROR: {AGENT_FROM_NUMBER} not found in account")
         else:
-            num = matches[0]
-            lines.append(f"Number found: {num.phone_number}")
-            lines.append(f"Current voice_url: {num.voice_url or '(none)'}")
+            lines.append(f"Number found: {match.phone_number}")
+            lines.append(f"Current voice_url: {match.voice_url or '(none)'}")
             target = f"{PUBLIC_URL}/twiml/inbound-agent"
-            if num.voice_url != target:
-                num.update(
+            if match.voice_url != target:
+                match.update(
                     voice_url=target,
                     voice_method="POST",
                     status_callback=f"{PUBLIC_URL}/webhook/call",
@@ -1410,7 +1418,7 @@ def twiml_probe():
             else:
                 lines.append(f"OK: voice_url already correct")
     except Exception as e:
-        lines.append(f"ERROR: {e}")
+        lines.append(f"ERROR checking webhook: {e}")
     return "\n".join(lines), 200, {"Content-Type": "text/plain"}
 
 
