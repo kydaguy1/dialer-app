@@ -6,6 +6,7 @@
 <title>Power Dialer</title>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+button, a, select, label { touch-action: manipulation; }
 :root {
   --blue:    #2563eb;
   --blue-lt: #eff6ff;
@@ -111,7 +112,7 @@ html, body {
 .fub-select {
   flex: 1; min-width: 0; padding: 11px 36px 11px 12px; border: 1.5px solid var(--border);
   border-radius: 10px; background: var(--white); color: var(--text);
-  font-size: 14px; cursor: pointer; outline: none; min-height: 46px;
+  font-size: 16px; cursor: pointer; outline: none; min-height: 46px;
   -webkit-appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='7' viewBox='0 0 11 7'%3E%3Cpath d='M1 1l4.5 4.5L10 1' stroke='%2394a3b8' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat; background-position: right 12px center;
@@ -152,10 +153,9 @@ html, body {
   font-size: 11px; font-weight: 700; color: var(--blue);
   text-transform: uppercase; letter-spacing: .1em;
 }
-#callin-link {
+#callin-number {
   font-size: 30px; font-weight: 800; color: var(--blue);
-  letter-spacing: .02em; text-decoration: none; display: block;
-  text-align: center;
+  letter-spacing: .02em; display: block; text-align: center;
 }
 .callin-hint { font-size: 12px; color: var(--gray); }
 
@@ -237,6 +237,7 @@ html, body {
   display: none; background: var(--bg); border: 1.5px solid var(--border);
   border-radius: 10px; padding: 16px; margin-bottom: 14px;
   font-size: 12px; line-height: 1.75; color: #374151; max-height: 260px; overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .s-tag {
   display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .06em;
@@ -265,7 +266,7 @@ hr.s-div      { border: none; border-top: 1px solid var(--border); margin: 10px 
 .seg-btn {
   padding: 7px 13px; border: 1.5px solid var(--border); border-radius: 8px;
   background: var(--white); color: var(--gray); font-size: 12px; font-weight: 600;
-  cursor: pointer; transition: all .12s; min-height: 36px;
+  cursor: pointer; transition: all .12s; min-height: 44px; touch-action: manipulation;
 }
 .seg-btn:hover { border-color: var(--muted); }
 .seg-btn.active { background: var(--blue); border-color: var(--blue); color: #fff; }
@@ -281,7 +282,7 @@ hr.s-div      { border: none; border-top: 1px solid var(--border); margin: 10px 
 .pill {
   padding: 7px 16px; border-radius: 99px; border: 1.5px solid var(--border);
   background: var(--white); font-size: 12px; font-weight: 600; color: var(--gray);
-  cursor: pointer; min-height: 36px; transition: all .12s;
+  cursor: pointer; min-height: 44px; transition: all .12s; touch-action: manipulation;
 }
 .pill.active { background: var(--blue); border-color: var(--blue); color: #fff; }
 
@@ -454,11 +455,11 @@ hr.s-div      { border: none; border-top: 1px solid var(--border); margin: 10px 
 
     <!-- Call-in CTA (shown after Start Session) -->
     <div id="callin-row" style="display:none">
-      <div class="callin-cta-inner" onclick="document.getElementById('callin-link').click()">
+      <a id="callin-link" href="tel:+19517621736" class="callin-cta-inner">
         <span class="callin-label">📞 Tap to call in &amp; start dialing</span>
-        <a id="callin-link" href="tel:+19517621736">(951) 762-1736</a>
+        <span id="callin-number">(951) 762-1736</span>
         <span class="callin-hint">Connects you to the conference bridge</span>
-      </div>
+      </a>
     </div>
 
     <!-- Lead card -->
@@ -586,7 +587,7 @@ hr.s-div      { border: none; border-top: 1px solid var(--border); margin: 10px 
           TEXT MESSAGE — use <code style="background:var(--border);padding:1px 4px;border-radius:3px">{first}</code> for lead's first name
         </div>
         <textarea id="text-edit-area" rows="3"
-          style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;line-height:1.5;resize:vertical;font-family:inherit;color:var(--text);background:var(--white);outline:none;"
+          style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:8px;font-size:16px;line-height:1.5;resize:vertical;font-family:inherit;color:var(--text);background:var(--white);outline:none;"
           onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border)'"></textarea>
         <div style="display:flex;justify-content:flex-end;margin-top:6px;">
           <button onclick="saveTextTemplate()" style="padding:7px 16px;background:var(--blue);color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;min-height:32px;">Save</button>
@@ -940,7 +941,7 @@ async function startSession() {
   const callinLink = document.getElementById('callin-link');
   if (d.call_in) {
     callinLink.href = `tel:${d.call_in}`;
-    callinLink.textContent = d.call_in.replace('+1','').replace(/(\d{3})(\d{3})(\d{4})/,'($1) $2-$3');
+    document.getElementById('callin-number').textContent = d.call_in.replace('+1','').replace(/(\d{3})(\d{3})(\d{4})/,'($1) $2-$3');
     callinRow.style.display = 'block';
     setStatus('calling-agent', 'Tap the number above to call in');
     showPlaceholder('Waiting for you to call in…');
