@@ -1487,8 +1487,10 @@ def _twiml_lead_inner():
 
     r = VoiceResponse()
 
-    # ── machine or fax → voicemail drop ─────────────────────────────────────────
-    if answered_by.startswith("machine") or answered_by == "fax":
+    # ── machine_end_beep → could be IVR call screening ("please record your name")
+    #    Connect to conference so agent can speak their name through the IVR.
+    #    All other machine/fax results → voicemail drop. ─────────────────────────
+    if answered_by in ("machine_end_silence", "machine_end_other", "machine_start", "fax"):
         with _lock:
             _s["active_calls"].pop(sid, None)
             _s["stats"]["voicemail"] += 1
@@ -1514,7 +1516,9 @@ def _twiml_lead_inner():
         r.hangup()
         return Response(str(r), mimetype="text/xml")
 
-    # ── human or unknown → connect to conference ─────────────────────────────────
+    # ── human OR machine_end_beep (IVR screening) → connect to conference ────────
+    if answered_by == "machine_end_beep":
+        _log(f"IVR screening ({answered_by}) — {lead.get('name') or sid if lead else sid} — connecting so you can say your name")
     with _lock:
         already_taken = _s["connected_sid"] is not None
         if not already_taken:
