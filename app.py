@@ -5,10 +5,12 @@ Start via: bash ~/Desktop/dialer/start.sh
 """
 
 import eventlet
+import eventlet.tpool
 eventlet.monkey_patch()
 
 import base64
 import csv
+import datetime as _datetime
 import json as _json
 import os
 import re
@@ -103,6 +105,7 @@ def _on_mac_connect(auth):
         return False
     _mac_sid = request.sid
     _log("Mac helper connected")
+    socketio.emit("get_call_log", {}, to=request.sid)
 
 @socketio.on("disconnect")
 def _on_mac_disconnect():
@@ -110,6 +113,20 @@ def _on_mac_disconnect():
     if _mac_sid == request.sid:
         _mac_sid = None
         _log("Mac helper disconnected — texts will fall back to SMS")
+
+@socketio.on("call_log_data")
+def _on_call_log_data(data):
+    global _call_log
+    if not isinstance(data, dict):
+        return
+    with _lock:
+        for phone, entry in data.items():
+            existing = _call_log.get(phone, {})
+            if entry.get("count", 0) > existing.get("count", 0):
+                _call_log[phone] = entry
+    print(f"[dialer] Synced call log from Mac: {len(data)} numbers")
+    threading.Thread(target=_save_call_log, daemon=True).start()
+
 
 @socketio.on("text_result")
 def _on_text_result(data):
@@ -122,27 +139,68 @@ def _on_text_result(data):
 
 
 def _setup_inbound_webhook() -> None:
-    """Point the owned SignalWire number's inbound voice URL at this app so the agent
-    can call in rather than being called out."""
+    """Point the owned SignalWire number's inbound voice URL at this app."""
     if not USE_SIGNALWIRE or not PUBLIC_URL:
         return
     number = os.environ.get("SIGNALWIRE_AGENT_FROM", "")
+    space  = os.environ.get("SIGNALWIRE_SPACE_URL", "")
+    proj   = os.environ.get("SIGNALWIRE_PROJECT_ID", "")
+    tok    = os.environ.get("SIGNALWIRE_API_TOKEN", "")
     if not number:
         return
+
+    voice_url = f"{PUBLIC_URL}/twiml/inbound-agent"
+
+    # Primary: Twilio-compat SDK
     try:
         matches = twilio.incoming_phone_numbers.list(phone_number=number)
-        if not matches:
-            print(f"[dialer] WARNING: {number} not found in SignalWire account")
+        if matches:
+            matches[0].update(voice_url=voice_url, voice_method="POST",
+                              status_callback=f"{PUBLIC_URL}/webhook/call",
+                              status_callback_method="POST")
+            print(f"[dialer] Inbound webhook set (SDK) → {voice_url}")
             return
-        matches[0].update(
-            voice_url=f"{PUBLIC_URL}/twiml/inbound-agent",
-            voice_method="POST",
-            status_callback=f"{PUBLIC_URL}/webhook/call",
-            status_callback_method="POST",
-        )
-        print(f"[dialer] Inbound webhook set → {PUBLIC_URL}/twiml/inbound-agent")
+        print(f"[dialer] WARNING: {number} not found via SDK — trying REST fallback")
     except Exception as e:
-        print(f"[dialer] WARNING: could not update inbound webhook: {e}")
+        print(f"[dialer] SDK webhook update failed ({e}) — trying REST fallback")
+
+    # Fallback: direct SignalWire REST API
+    if not (space and proj and tok):
+        print("[dialer] WARNING: missing SignalWire env vars, cannot set inbound webhook")
+        return
+    try:
+        nums_r = http.get(
+            f"https://{space}/api/laml/2010-04-01/Accounts/{proj}/IncomingPhoneNumbers",
+            auth=(proj, tok), params={"PhoneNumber": number},
+        )
+        nums = (nums_r.json() if nums_r.text.strip() else {}).get("incoming_phone_numbers", [])
+        if not nums:
+            # Try listing all to find by number
+            all_r = http.get(
+                f"https://{space}/api/laml/2010-04-01/Accounts/{proj}/IncomingPhoneNumbers",
+                auth=(proj, tok),
+            )
+            nums = [n for n in (all_r.json() if all_r.text.strip() else {}).get("incoming_phone_numbers", [])
+                    if n.get("phone_number") == number]
+        if not nums:
+            print(f"[dialer] WARNING: {number} not found in SignalWire — set webhook manually in dashboard")
+            print(f"[dialer]   URL to set: {voice_url}")
+            return
+        sid = nums[0]["sid"]
+        upd = http.post(
+            f"https://{space}/api/laml/2010-04-01/Accounts/{proj}/IncomingPhoneNumbers/{sid}",
+            auth=(proj, tok),
+            data={"VoiceUrl": voice_url, "VoiceMethod": "POST",
+                  "StatusCallback": f"{PUBLIC_URL}/webhook/call", "StatusCallbackMethod": "POST"},
+        )
+        if upd.ok:
+            print(f"[dialer] Inbound webhook set (REST) → {voice_url}")
+        else:
+            print(f"[dialer] WARNING: REST update failed {upd.status_code}: {upd.text[:100]}")
+            print(f"[dialer]   Set webhook manually: {voice_url}")
+    except Exception as e:
+        print(f"[dialer] WARNING: could not set inbound webhook: {e}")
+        print(f"[dialer]   Set manually in SignalWire dashboard: {voice_url}")
 
 _fub_team_base: str | None = None
 
@@ -215,8 +273,11 @@ _reset()
 # ── Session checkpoint (resume after pause/close) ──────────────────────────────
 _CHECKPOINT_PATH  = Path(tempfile.gettempdir()) / "dialer_checkpoint.json"
 _DIALED_LOG_PATH  = Path(tempfile.gettempdir()) / "dialer_recent.json"
+_CALL_LOG_PATH    = Path(tempfile.gettempdir()) / "dialer_call_log.json"
 _REDIAL_COOLDOWN  = 3600   # seconds — skip a number if dialed within this window
 _dialed: dict     = {}     # E.164 phone → unix timestamp of last outbound dial attempt
+_call_log: dict   = {}     # E.164 phone → {count, last, first, name}
+_max_calls: int   = int(os.environ.get("MAX_CALLS", "3"))  # 0 = unlimited
 
 def _save_checkpoint():
     """Save current progress so the session can be resumed later."""
@@ -234,13 +295,14 @@ def _save_checkpoint():
             "total":     len(leads),
             "leads":     leads[idx:],
         }
-        _CHECKPOINT_PATH.write_text(_json.dumps(data))
+        text = _json.dumps(data)
+        eventlet.tpool.execute(_CHECKPOINT_PATH.write_text, text)
     except Exception as e:
         print(f"[dialer] Checkpoint save error: {e}")
 
 def _clear_checkpoint():
     try:
-        _CHECKPOINT_PATH.unlink(missing_ok=True)
+        eventlet.tpool.execute(_CHECKPOINT_PATH.unlink, missing_ok=True)
     except Exception:
         pass
 
@@ -263,9 +325,30 @@ def _save_dialed_log():
         now = time.time()
         with _lock:
             fresh = {ph: ts for ph, ts in _dialed.items() if now - ts < _REDIAL_COOLDOWN}
-        _DIALED_LOG_PATH.write_text(_json.dumps(fresh))
+        text = _json.dumps(fresh)
+        eventlet.tpool.execute(_DIALED_LOG_PATH.write_text, text)
     except Exception as e:
         print(f"[dialer] Dialed log save error: {e}")
+
+
+def _load_call_log():
+    global _call_log
+    try:
+        if _CALL_LOG_PATH.exists():
+            _call_log = _json.loads(_CALL_LOG_PATH.read_text())
+            print(f"[dialer] Loaded call log: {len(_call_log)} numbers")
+    except Exception:
+        _call_log = {}
+
+
+def _save_call_log():
+    try:
+        with _lock:
+            data = dict(_call_log)
+        text = _json.dumps(data)
+        eventlet.tpool.execute(_CALL_LOG_PATH.write_text, text)
+    except Exception as e:
+        print(f"[dialer] Call log save error: {e}")
 
 
 @app.get("/api/checkpoint")
@@ -343,6 +426,7 @@ def _session_watchdog():
 # Detect team URL in background so it's ready by first page load
 threading.Thread(target=_get_fub_team_base, daemon=True).start()
 _load_dialed_log()
+_load_call_log()
 threading.Thread(target=_session_watchdog, daemon=True).start()
 
 
@@ -860,10 +944,14 @@ def _dial_batch():
     for lead in batch:
         phone = _e164(lead.get("phone", ""))
         with _lock:
-            last = _dialed.get(phone, 0)
+            last       = _dialed.get(phone, 0)
+            call_count = _call_log.get(phone, {}).get("count", 0)
         if now - last < _REDIAL_COOLDOWN:
             mins = int((now - last) / 60)
             _log(f"Skip (called {mins}m ago)  {lead.get('name') or phone}")
+            continue
+        if _max_calls > 0 and call_count >= _max_calls:
+            _log(f"Skip (called {call_count}× already)  {lead.get('name') or phone}")
             continue
         try:
             call = twilio.calls.create(
@@ -880,14 +968,33 @@ def _dial_batch():
                 machine_detection_speech_end_threshold=1200,
                 machine_detection_silence_timeout=5000,
             )
+            today = _datetime.date.today().isoformat()
             with _lock:
                 _s["active_calls"][call.sid] = lead
                 _s["stats"]["called"] += 1
                 _dialed[phone] = now
+                existing = _call_log.get(phone, {})
+                _call_log[phone] = {
+                    "count": existing.get("count", 0) + 1,
+                    "last":  today,
+                    "first": existing.get("first", today),
+                    "name":  lead.get("name", ""),
+                }
+                new_entry = dict(_call_log[phone])
+                mac = _mac_sid
             calls_made += 1
             _log(f"Ringing  {lead['name'] or lead['phone']}")
+            if mac:
+                socketio.emit("update_call_log", {"phone": phone, "entry": new_entry}, to=mac)
         except Exception as e:
-            _log(f"Dial error {lead['phone']}: {e}")
+            err = str(e)
+            if "not routeable" in err or "is not a valid" in err or "Invalid phone" in err.lower():
+                _log(f"Bad number (skipped)  {lead.get('name') or lead['phone']}")
+                with _lock:
+                    _dialed[phone] = now   # don't retry this session
+                    _s["stats"]["failed"] += 1
+            else:
+                _log(f"Dial error {lead['phone']}: {e}")
 
     if calls_made == 0:
         # All leads in this batch were recently dialed — skip forward immediately
@@ -899,6 +1006,7 @@ def _dial_batch():
             threading.Thread(target=_dial_batch, daemon=True).start()
     else:
         threading.Thread(target=_save_dialed_log, daemon=True).start()
+        threading.Thread(target=_save_call_log, daemon=True).start()
 
 
 # ── Routes ─────────────────────────────────────────────────────────────────────
@@ -1101,6 +1209,7 @@ def api_status():
             "mac_helper":         _mac_sid is not None,
             "fub_stage":          _fub_stage,
             "fub_no_create":      _fub_no_create,
+            "max_calls":          _max_calls,
         })
 
 
@@ -1134,6 +1243,28 @@ def api_fub_no_create():
     global _fub_no_create
     _fub_no_create = bool((request.get_json() or {}).get("no_create", False))
     return jsonify({"fub_no_create": _fub_no_create})
+
+
+@app.post("/api/max-calls")
+def api_max_calls():
+    global _max_calls
+    _max_calls = max(0, int((request.get_json() or {}).get("max_calls", 3)))
+    return jsonify({"max_calls": _max_calls})
+
+
+@app.route("/api/call-log", methods=["GET", "DELETE"])
+def api_call_log():
+    global _call_log
+    if request.method == "DELETE":
+        with _lock:
+            _call_log = {}
+        threading.Thread(target=_save_call_log, daemon=True).start()
+        if _mac_sid:
+            socketio.emit("clear_call_log", {})
+        return jsonify({"ok": True, "cleared": True})
+    with _lock:
+        data = dict(_call_log)
+    return jsonify({"count": len(data), "log": data})
 
 
 @app.post("/api/script-type")

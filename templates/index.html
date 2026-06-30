@@ -554,6 +554,20 @@ hr.s-div      { border: none; border-top: 1px solid var(--border); margin: 10px 
         </div>
       </div>
       <div class="setting-row">
+        <span class="setting-label">Max Calls / #</span>
+        <div class="pill-toggle" id="max-calls-pills">
+          <button class="pill" onclick="setMaxCalls(1)">1×</button>
+          <button class="pill" onclick="setMaxCalls(2)">2×</button>
+          <button class="pill active" onclick="setMaxCalls(3)">3×</button>
+          <button class="pill" onclick="setMaxCalls(0)">∞</button>
+        </div>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">Call Log</span>
+        <button class="pill" onclick="clearCallLog()" style="font-size:11px">Clear History</button>
+        <span id="call-log-count" style="font-size:11px;color:#888;margin-left:4px"></span>
+      </div>
+      <div class="setting-row">
         <span class="setting-label"></span>
         <label class="toggle-wrap" id="toggle-text-row" for="toggle-text">
           <input type="checkbox" id="toggle-text" onchange="setAutoText(this.checked)">
@@ -841,6 +855,16 @@ async function setFubNoCreate(no_create) {
   document.getElementById('pill-create-no').classList.toggle('active', no_create);
   await fetch('/api/fub-no-create', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({no_create})});
 }
+async function setMaxCalls(n) {
+  const vals = [1,2,3,0];
+  document.querySelectorAll('#max-calls-pills .pill').forEach((b,i) => b.classList.toggle('active', vals[i] === n));
+  await fetch('/api/max-calls', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({max_calls:n})});
+}
+async function clearCallLog() {
+  if (!confirm('Clear the entire call history? This cannot be undone.')) return;
+  await fetch('/api/call-log', {method:'DELETE'});
+  document.getElementById('call-log-count').textContent = '(cleared)';
+}
 async function setAutoText(enabled) {
   document.getElementById('toggle-text-row').classList.toggle('on', enabled);
   document.getElementById('text-type-row').style.display = enabled ? 'flex' : 'none';
@@ -943,8 +967,16 @@ async function poll() {
   try { updateUI(await fetch('/api/status').then(r => r.json())); } catch(e) {}
 }
 
+let _callLogCountFetched = false;
 function updateUI(d) {
   const {state, paused, lines, send_text, text_type, script_type, lead, remaining, total, active, stats, log: logs, mac_helper} = d;
+  if (!_callLogCountFetched) {
+    _callLogCountFetched = true;
+    fetch('/api/call-log').then(r=>r.json()).then(data=>{
+      const el = document.getElementById('call-log-count');
+      if (el) el.textContent = data.count ? `${data.count} numbers tracked` : '';
+    }).catch(()=>{});
+  }
 
   const badge = document.getElementById('mac-badge');
   if (mac_helper !== undefined) {
@@ -978,6 +1010,10 @@ function updateUI(d) {
   if (d.fub_no_create !== undefined) {
     document.getElementById('pill-create-yes').classList.toggle('active', !d.fub_no_create);
     document.getElementById('pill-create-no').classList.toggle('active',   d.fub_no_create);
+  }
+  if (d.max_calls !== undefined) {
+    const vals = [1,2,3,0];
+    document.querySelectorAll('#max-calls-pills .pill').forEach((b,i) => b.classList.toggle('active', vals[i] === d.max_calls));
   }
   if (lines) {
     currentLines = lines;
