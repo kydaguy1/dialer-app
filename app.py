@@ -1459,7 +1459,7 @@ def twiml_lead():
             r.say(
                 "Hi, this is Ky Ramzy with the Bringas Home Team — just tried to reach you. "
                 "Feel free to call or text me back at "
-                "9 5 1, 7 6 2, 1 7 3 6. That's 9 5 1, 7 6 2, 1 7 3 6. Have a great day!",
+                "9 5 1, 4 4 7, 8 7 2 8. That's 9 5 1, 4 4 7, 8 7 2 8. Have a great day!",
                 voice="Polly.Matthew",
                 language="en-US",
             )
