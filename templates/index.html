@@ -477,7 +477,10 @@ hr.s-div      { border: none; border-top: 1px solid var(--border); margin: 10px 
           <span class="lead-tag tag-years"  id="lead-years"></span>
         </div>
         <div class="lead-whycall" id="lead-whycall" style="display:none"></div>
-        <a class="lead-link" id="lead-fub-url" href="#" target="_blank">Open in FUB →</a>
+        <div style="display:flex;gap:8px;margin-top:6px;align-items:center;flex-wrap:wrap">
+          <a class="lead-link" id="lead-fub-url" href="#" target="_blank" style="margin-top:0">Open in FUB →</a>
+          <button id="btn-add-fub" onclick="addToFub()" style="display:none;padding:4px 12px;background:#eff6ff;border:1.5px solid #93c5fd;border-radius:7px;font-size:12px;font-weight:700;color:#1d4ed8;cursor:pointer;min-height:28px;touch-action:manipulation">+ Add to FUB</button>
+        </div>
         <div class="dial-indicator" id="dial-indicator">
           <span class="dial-spinner">↻</span>
           <span id="dial-count"></span>
@@ -1179,9 +1182,30 @@ function showLead(lead) {
   updateFubUrl(lead);
 }
 function updateFubUrl(lead) {
-  const el = document.getElementById('lead-fub-url');
-  if (lead && lead.fub_url) { el.href = lead.fub_url; el.style.display = 'inline'; }
-  else { el.style.display = 'none'; }
+  const el    = document.getElementById('lead-fub-url');
+  const addEl = document.getElementById('btn-add-fub');
+  if (lead && lead.fub_url) {
+    el.href = lead.fub_url; el.style.display = 'inline';
+    if (addEl) addEl.style.display = 'none';
+  } else {
+    el.style.display = 'none';
+    if (addEl) addEl.style.display = lead ? 'inline-block' : 'none';
+  }
+}
+
+async function addToFub() {
+  const btn = document.getElementById('btn-add-fub');
+  btn.textContent = '…'; btn.disabled = true;
+  try {
+    const d = await fetch('/api/fub/add-lead', {method:'POST'}).then(r => r.json());
+    if (d.error) { alert('Could not add to FUB: ' + d.error); btn.textContent = '+ Add to FUB'; btn.disabled = false; return; }
+    btn.style.display = 'none';
+    const el = document.getElementById('lead-fub-url');
+    el.href = d.fub_url; el.style.display = 'inline';
+    if (d.created) el.textContent = 'Added to FUB →';
+    else el.textContent = 'Open in FUB →';
+    window.open(d.fub_url, '_blank');
+  } catch(e) { btn.textContent = '+ Add to FUB'; btn.disabled = false; }
 }
 function showPlaceholder(msg) {
   document.getElementById('lead-info').style.display      = 'none';

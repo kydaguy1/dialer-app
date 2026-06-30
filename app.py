@@ -1795,6 +1795,63 @@ def api_callback():
         return jsonify({"error": str(e)}), 500
 
 
+@app.post("/api/fub/add-lead")
+def api_fub_add_lead():
+    """Create the current connected lead in FUB (if not already there) and return their profile URL."""
+    with _lock:
+        lead = _s.get("current_lead")
+    if not lead:
+        return jsonify({"error": "No active lead"}), 400
+
+    phone = _e164(lead.get("phone", ""))
+    name  = (lead.get("name") or "").strip()
+    parts = name.split(" ", 1)
+
+    try:
+        s = http.Session()
+        s.auth = (FUB_KEY, "")
+        s.headers.update({"Content-Type": "application/json"})
+
+        # Look up existing
+        r = s.get(f"{FUB_URL}/people", params={"phone": phone})
+        people = r.json().get("people", [])
+        if people:
+            pid = people[0]["id"]
+            lead["id"] = pid
+            base = _get_fub_team_base() or "https://app.followupboss.com"
+            url  = f"{base}/2/people/view/{pid}"
+            _log(f"FUB ✓  {name} already in FUB")
+            return jsonify({"ok": True, "fub_url": url, "created": False})
+
+        # Create new contact
+        payload = {
+            "firstName": parts[0],
+            "lastName":  parts[1] if len(parts) > 1 else "",
+            "phones": [{"value": phone, "type": "mobile", "isPrimary": True}],
+        }
+        if lead.get("address"):
+            payload["address"] = lead["address"]
+        if _fub_stage:
+            payload["stage"] = _fub_stage
+
+        cr = s.post(f"{FUB_URL}/people", json=payload)
+        if not cr.ok:
+            return jsonify({"error": f"FUB {cr.status_code}: {cr.text[:120]}"}), 500
+
+        pid = (cr.json().get("person") or cr.json()).get("id")
+        if not pid:
+            return jsonify({"error": "No ID returned from FUB"}), 500
+
+        lead["id"] = pid
+        base = _get_fub_team_base() or "https://app.followupboss.com"
+        url  = f"{base}/2/people/view/{pid}"
+        _log(f"FUB ✓  {name} added as new contact")
+        return jsonify({"ok": True, "fub_url": url, "created": True})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # ── Leaderboard ────────────────────────────────────────────────────────────────
 _lb_cache: dict = {}  # {"data": {...}, "ts": float}
 
